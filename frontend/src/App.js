@@ -165,7 +165,7 @@ function LoginPro({ setToken }) {
   const handleLogin = async () => {
     setLoading(true); setError('');
     try {
-      const res  = await fetch('http://localhost:4000/login', {
+      const res  = await fetch('https://his-biomedico-production.up.railway.app/login', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ email, password: pass })
       });
@@ -211,7 +211,7 @@ function ModalOT({ equipos, token, onClose, onSaved }) {
   const guardar = async () => {
     if (!form.equipo_id||!form.fecha_programada) { alert('Equipo y fecha son obligatorios'); return; }
     setSaving(true);
-    await fetch('http://localhost:4000/mantenimientos',{method:'POST',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(form)});
+    await fetch('https://his-biomedico-production.up.railway.app/mantenimientos',{method:'POST',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(form)});
     setSaving(false); onSaved(); onClose();
   };
   return (
@@ -253,7 +253,7 @@ function ModalFinalizar({ ot, token, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const finalizar = async () => {
     setSaving(true);
-    await fetch(`http://localhost:4000/mantenimientos/${ot.id}`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify({observaciones:obs})});
+    await fetch(`https://his-biomedico-production.up.railway.app/mantenimientos/${ot.id}`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify({observaciones:obs})});
     setSaving(false); onSaved(); onClose();
   };
   return (
@@ -283,7 +283,7 @@ function ModalTecno({ equipos, token, onClose, onSaved }) {
   const guardar = async () => {
     if (!form.descripcion||!form.fecha_evento) { alert('Descripción y fecha son obligatorios'); return; }
     setSaving(true);
-    await fetch('http://localhost:4000/tecnovigilancia',{method:'POST',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(form)});
+    await fetch('https://his-biomedico-production.up.railway.app/tecnovigilancia',{method:'POST',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(form)});
     setSaving(false); onSaved(); onClose();
   };
   return (
@@ -331,7 +331,7 @@ function ModalUsuario({ usuario, token, onClose, onSaved }) {
     if (!form.nombre||!form.email) { alert('Nombre y email son obligatorios'); return; }
     if (esNuevo && !form.password)  { alert('La contraseña es obligatoria para usuarios nuevos'); return; }
     setSaving(true);
-    const url    = esNuevo ? 'http://localhost:4000/register' : `http://localhost:4000/usuarios/${usuario.id}`;
+    const url    = esNuevo ? 'https://his-biomedico-production.up.railway.app/register' : `https://his-biomedico-production.up.railway.app/usuarios/${usuario.id}`;
     const method = esNuevo ? 'POST' : 'PUT';
     const body   = esNuevo ? form : { nombre:form.nombre, email:form.email, rol:form.rol, ...(form.password && {password:form.password}) };
     const res    = await fetch(url,{method,headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(body)});
@@ -410,13 +410,13 @@ function App() {
   const headers = { Authorization: token };
 
   const cargarTodo = () => {
-    fetch('http://localhost:4000/equipos',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setEquipos(d)).catch(()=>{});
-    fetch('http://localhost:4000/mantenimientos',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setMantenimientos(d)).catch(()=>{});
-    fetch('http://localhost:4000/mantenimientos/kpis',{headers}).then(r=>r.json()).then(setKpis).catch(()=>{});
-    fetch('http://localhost:4000/tecnovigilancia',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setTecno(d)).catch(()=>{});
-    fetch('http://localhost:4000/dashboard/kpis',{headers}).then(r=>r.json()).then(setDashKpis).catch(()=>{});
+    fetch('https://his-biomedico-production.up.railway.app/equipos',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setEquipos(d)).catch(()=>{});
+    fetch('https://his-biomedico-production.up.railway.app/mantenimientos',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setMantenimientos(d)).catch(()=>{});
+    fetch('https://his-biomedico-production.up.railway.app/mantenimientos/kpis',{headers}).then(r=>r.json()).then(setKpis).catch(()=>{});
+    fetch('https://his-biomedico-production.up.railway.app/tecnovigilancia',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setTecno(d)).catch(()=>{});
+    fetch('https://his-biomedico-production.up.railway.app/dashboard/kpis',{headers}).then(r=>r.json()).then(setDashKpis).catch(()=>{});
     if (rol==='Admin') {
-      fetch('http://localhost:4000/usuarios',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setUsuarios(d)).catch(()=>{});
+      fetch('https://his-biomedico-production.up.railway.app/usuarios',{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setUsuarios(d)).catch(()=>{});
     }
   };
 
@@ -424,11 +424,11 @@ function App() {
 
   const verHistorial = (eq) => {
     setEquipoSel(eq); setSeccion('historial');
-    fetch(`http://localhost:4000/historial/${eq.id}`,{headers}).then(r=>r.json()).then(setHistorial).catch(()=>{});
+    fetch(`https://his-biomedico-production.up.railway.app/historial/${eq.id}`,{headers}).then(r=>r.json()).then(setHistorial).catch(()=>{});
   };
 
   const guardar = () => {
-    const url = editando ? `http://localhost:4000/equipos/${editando}` : `http://localhost:4000/equipos`;
+    const url = editando ? `https://his-biomedico-production.up.railway.app/equipos/${editando}` : `https://his-biomedico-production.up.railway.app/equipos`;
     fetch(url,{method:editando?'PUT':'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then(r=>r.json()).then(()=>{setEditando(null);setForm(formVacio);cargarTodo();}).catch(console.error);
   };
@@ -443,22 +443,22 @@ function App() {
 
   const eliminar = (id) => {
     if (!window.confirm('¿Confirmar eliminación?')) return;
-    fetch(`http://localhost:4000/equipos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo());
+    fetch(`https://his-biomedico-production.up.railway.app/equipos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo());
   };
 
   const eliminarUsuario = (id) => {
     if (!window.confirm('¿Eliminar usuario?')) return;
-    fetch(`http://localhost:4000/usuarios/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo());
+    fetch(`https://his-biomedico-production.up.railway.app/usuarios/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo());
   };
 
   const cambiarEstadoTecno = (id, estado) => {
-    fetch(`http://localhost:4000/tecnovigilancia/${id}`,{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({estado})})
+    fetch(`https://his-biomedico-production.up.railway.app/tecnovigilancia/${id}`,{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({estado})})
       .then(()=>cargarTodo());
   };
 
   const descargarPDF = async () => {
     try {
-      const res  = await fetch('http://localhost:4000/reporte/equipos',{headers});
+      const res  = await fetch('https://his-biomedico-production.up.railway.app/reporte/equipos',{headers});
       const blob = await res.blob();
       const url  = window.URL.createObjectURL(blob);
       const a    = document.createElement('a');
