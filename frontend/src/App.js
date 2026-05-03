@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import ModalImportar from './ModalImportar';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
+import ModalImportar from './ModalImportar';
 
 const API = 'https://his-biomedico-production.up.railway.app';
 
@@ -225,7 +225,6 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
     if (!file) return;
     if (file.size > 5*1024*1024) return alert('Imagen muy grande (máx 5MB)');
     if (!file.type.startsWith('image/')) return alert('Solo se permiten imágenes');
-
     setUploading(true);
     try {
       const fd = new FormData();
@@ -235,9 +234,7 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
       const data = await res.json();
       if (data.secure_url) setForm(f=>({...f, logo_url: data.secure_url}));
       else alert('Error al subir: ' + (data.error?.message || 'desconocido'));
-    } catch(err) {
-      alert('Error de conexión: ' + err.message);
-    }
+    } catch(err) { alert('Error de conexión: ' + err.message); }
     setUploading(false);
   };
 
@@ -256,15 +253,9 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal">
       <div className="modal-header"><div className="modal-title">{esNueva?'Nueva institución':'Editar institución'}</div><button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button></div>
       <div className="modal-body">
-
-        {/* SECCIÓN LOGO */}
         <div style={{display:'flex',gap:16,alignItems:'center',marginBottom:20,padding:14,background:G.input,borderRadius:6,border:`1px solid ${G.inputBorder}`}}>
           <div style={{width:80,height:80,borderRadius:8,background:G.bg,border:`1px solid ${G.cardBorder}`,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
-            {form.logo_url ? (
-              <img src={form.logo_url} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}} />
-            ) : (
-              <span style={{fontSize:32}}>🏥</span>
-            )}
+            {form.logo_url ? <img src={form.logo_url} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}} /> : <span style={{fontSize:32}}>🏥</span>}
           </div>
           <div style={{flex:1}}>
             <div style={{fontSize:11,color:G.textMuted,letterSpacing:1,textTransform:'uppercase',fontWeight:600,marginBottom:6}}>Logo institucional</div>
@@ -273,17 +264,11 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
               <label htmlFor="logo-upload" className="btn btn-primary" style={{cursor:'pointer',fontSize:11,padding:'6px 12px'}}>
                 {uploading?'⏳ Subiendo...':form.logo_url?'↑ Cambiar imagen':'↑ Subir imagen'}
               </label>
-              {form.logo_url && (
-                <button className="btn btn-danger" style={{fontSize:11,padding:'6px 12px'}} onClick={()=>setForm({...form,logo_url:''})}>
-                  ✕ Quitar
-                </button>
-              )}
+              {form.logo_url && <button className="btn btn-danger" style={{fontSize:11,padding:'6px 12px'}} onClick={()=>setForm({...form,logo_url:''})}>✕ Quitar</button>}
             </div>
             <div style={{fontSize:10,color:G.textMuted,marginTop:6}}>PNG, JPG, SVG · Máx 5MB</div>
           </div>
         </div>
-
-        {/* CAMPOS */}
         <div className="form-grid">
           <div className="field" style={{gridColumn:'1/3'}}><label>Nombre *</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} /></div>
           <div className="field"><label>NIT</label><input value={form.nit} onChange={e=>setForm({...form,nit:e.target.value})} /></div>
@@ -324,21 +309,15 @@ function ModalOT({ equipos, token, onClose, onSaved }) {
   );
 }
 
-// Modal finalizar OT con repuestos
 function ModalFinalizar({ ot, token, repuestos, onClose, onSaved }) {
   const [obs, setObs] = useState('');
   const [saving, setSaving] = useState(false);
-  const [usados, setUsados] = useState([]); // [{repuesto_id, cantidad}]
-
-  // Filtrar solo repuestos compatibles con el equipo de la OT
+  const [usados, setUsados] = useState([]);
   const repuestosDisp = repuestos.filter(r => r.stock_actual > 0);
-
   const agregarRep = () => setUsados([...usados,{repuesto_id:'',cantidad:1}]);
   const cambiarRep = (i,campo,val) => { const n=[...usados]; n[i][campo]=val; setUsados(n); };
   const quitarRep = (i) => setUsados(usados.filter((_,j)=>j!==i));
-
   const finalizar = async () => {
-    // validar
     for (const u of usados) {
       if (!u.repuesto_id || !u.cantidad || u.cantidad<=0) return alert('Verifica los repuestos');
       const r = repuestos.find(x=>x.id===parseInt(u.repuesto_id));
@@ -354,7 +333,6 @@ function ModalFinalizar({ ot, token, repuestos, onClose, onSaved }) {
     if (data.error) return alert(data.error);
     onSaved(); onClose();
   };
-
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal">
       <div className="modal-header"><div className="modal-title">Finalizar OT — {ot.equipo_nombre}</div><button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button></div>
@@ -364,29 +342,24 @@ function ModalFinalizar({ ot, token, repuestos, onClose, onSaved }) {
           <div><b>Tipo:</b> {ot.tipo} · <b>Programado:</b> {formatFecha(ot.fecha_programada)}</div>
         </div>
         <div className="field" style={{marginBottom:16}}><label>Observaciones</label><textarea value={obs} onChange={e=>setObs(e.target.value)} placeholder="Trabajo realizado..." /></div>
-
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <label style={{fontSize:10,color:G.textMuted,letterSpacing:1,textTransform:'uppercase',fontWeight:600}}>Repuestos utilizados</label>
           <button className="btn btn-ghost" style={{fontSize:11,padding:'4px 10px'}} onClick={agregarRep}>+ Agregar repuesto</button>
         </div>
-
-        {usados.length===0 ? (
-          <div style={{fontSize:11,color:G.textMuted,padding:8,fontStyle:'italic'}}>Sin repuestos</div>
-        ) : usados.map((u,i)=>{
-          const r = repuestos.find(x=>x.id===parseInt(u.repuesto_id));
-          return (
-            <div key={i} className="repuesto-row">
-              <select value={u.repuesto_id} onChange={e=>cambiarRep(i,'repuesto_id',e.target.value)}
-                style={{background:G.input,border:`1px solid ${G.inputBorder}`,borderRadius:4,padding:'6px 8px',color:G.text,fontSize:12}}>
-                <option value="">Seleccionar repuesto</option>
-                {repuestosDisp.map(rp=><option key={rp.id} value={rp.id}>{rp.nombre} (stock: {rp.stock_actual})</option>)}
-              </select>
-              <input type="number" min="1" max={r?.stock_actual||999} value={u.cantidad} onChange={e=>cambiarRep(i,'cantidad',e.target.value)}
-                style={{background:G.input,border:`1px solid ${G.inputBorder}`,borderRadius:4,padding:'6px 8px',color:G.text,fontSize:12}} />
-              <button className="btn btn-danger btn-icon" onClick={()=>quitarRep(i)}>✕</button>
-            </div>
-          );
-        })}
+        {usados.length===0 ? <div style={{fontSize:11,color:G.textMuted,padding:8,fontStyle:'italic'}}>Sin repuestos</div>
+          : usados.map((u,i)=>{
+            const r = repuestos.find(x=>x.id===parseInt(u.repuesto_id));
+            return (
+              <div key={i} className="repuesto-row">
+                <select value={u.repuesto_id} onChange={e=>cambiarRep(i,'repuesto_id',e.target.value)} style={{background:G.input,border:`1px solid ${G.inputBorder}`,borderRadius:4,padding:'6px 8px',color:G.text,fontSize:12}}>
+                  <option value="">Seleccionar repuesto</option>
+                  {repuestosDisp.map(rp=><option key={rp.id} value={rp.id}>{rp.nombre} (stock: {rp.stock_actual})</option>)}
+                </select>
+                <input type="number" min="1" max={r?.stock_actual||999} value={u.cantidad} onChange={e=>cambiarRep(i,'cantidad',e.target.value)} style={{background:G.input,border:`1px solid ${G.inputBorder}`,borderRadius:4,padding:'6px 8px',color:G.text,fontSize:12}} />
+                <button className="btn btn-danger btn-icon" onClick={()=>quitarRep(i)}>✕</button>
+              </div>
+            );
+          })}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
@@ -454,7 +427,6 @@ function ModalUsuario({ usuario, token, instituciones, rol, onClose, onSaved }) 
   );
 }
 
-// MODAL REPUESTO (crear/editar)
 function ModalRepuesto({ repuesto, equipos, token, onClose, onSaved }) {
   const esNuevo = !repuesto;
   const [form, setForm] = useState({
@@ -474,7 +446,7 @@ function ModalRepuesto({ repuesto, equipos, token, onClose, onSaved }) {
     if (!form.nombre) return alert('Nombre obligatorio');
     setSaving(true);
     const url = esNuevo?`${API}/repuestos`:`${API}/repuestos/${repuesto.id}`;
-    const body = esNuevo ? form : (({stock_actual,...rest})=>rest)(form); // edit no manda stock_actual
+    const body = esNuevo ? form : (({stock_actual,...rest})=>rest)(form);
     const res = await fetch(url,{method:esNuevo?'POST':'PUT',headers:{'Content-Type':'application/json',Authorization:token},body:JSON.stringify(body)});
     const data = await res.json();
     setSaving(false);
@@ -508,7 +480,6 @@ function ModalRepuesto({ repuesto, equipos, token, onClose, onSaved }) {
           <div className="field"><label>Vencimiento</label><input type="date" value={form.fecha_vencimiento} onChange={e=>setForm({...form,fecha_vencimiento:e.target.value})} /></div>
           <div className="field" style={{gridColumn:'1/4'}}><label>Descripción</label><textarea value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})} /></div>
         </div>
-
         <div className="field" style={{marginTop:8}}>
           <label>Equipos compatibles ({form.equipos_compatibles.length} seleccionados)</label>
           <div className="checkbox-list">
@@ -528,7 +499,6 @@ function ModalRepuesto({ repuesto, equipos, token, onClose, onSaved }) {
   );
 }
 
-// MODAL MOVIMIENTO (entrada/salida/ajuste)
 function ModalMovimiento({ repuesto, token, onClose, onSaved }) {
   const [form, setForm] = useState({ tipo:'ENTRADA', cantidad:1, motivo:'COMPRA', descripcion:'' });
   const [saving, setSaving] = useState(false);
@@ -570,8 +540,7 @@ function ModalMovimiento({ repuesto, token, onClose, onSaved }) {
               {motivosPorTipo[form.tipo].map(m=><option key={m} value={m}>{m.replace('_',' ')}</option>)}
             </select></div>
           <div className="field"><label>Resultado</label>
-            <input value={form.tipo==='ENTRADA'?(repuesto.stock_actual+(form.cantidad||0)):form.tipo==='SALIDA'?(repuesto.stock_actual-(form.cantidad||0)):(form.cantidad||0)}
-              readOnly style={{background:G.bg,color:G.accent,fontFamily:'IBM Plex Mono'}} /></div>
+            <input value={form.tipo==='ENTRADA'?(repuesto.stock_actual+(form.cantidad||0)):form.tipo==='SALIDA'?(repuesto.stock_actual-(form.cantidad||0)):(form.cantidad||0)} readOnly style={{background:G.bg,color:G.accent,fontFamily:'IBM Plex Mono'}} /></div>
         </div>
         <div className="field"><label>Descripción</label><textarea value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})} placeholder="Detalle del movimiento..." /></div>
       </div>
@@ -580,7 +549,6 @@ function ModalMovimiento({ repuesto, token, onClose, onSaved }) {
   );
 }
 
-// MODAL DETALLE REPUESTO (con historial de movimientos)
 function ModalDetalleRepuesto({ repuesto, token, onClose }) {
   const [movimientos, setMovimientos] = useState([]);
   useEffect(() => {
@@ -631,6 +599,135 @@ function ModalDetalleRepuesto({ repuesto, token, onClose }) {
   );
 }
 
+// MODAL PROTOCOLO
+function ModalProtocolo({ protocolo, tiposEquipo, token, onClose, onSaved }) {
+  const esNuevo = !protocolo;
+  const [form, setForm] = useState({
+    nombre: protocolo?.nombre||'',
+    tipo_equipo: protocolo?.tipo_equipo||'',
+    descripcion: protocolo?.descripcion||'',
+    activo: protocolo?.activo!==false,
+  });
+  const [items, setItems] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(esNuevo);
+
+  useEffect(() => {
+    if (!esNuevo && protocolo?.id) {
+      fetch(`${API}/protocolos/${protocolo.id}`,{headers:{Authorization:token}})
+        .then(r=>r.json())
+        .then(d=>{ if(d.items) setItems(d.items.map(it=>({actividad:it.actividad}))); setLoaded(true); });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const agregarItem = () => setItems([...items,{actividad:''}]);
+  const cambiarItem = (i,val) => { const n=[...items]; n[i].actividad=val; setItems(n); };
+  const moverItem = (i,dir) => {
+    const n=[...items];
+    const j = i+dir;
+    if (j<0 || j>=n.length) return;
+    [n[i],n[j]] = [n[j],n[i]];
+    setItems(n);
+  };
+  const quitarItem = (i) => setItems(items.filter((_,j)=>j!==i));
+
+  const guardar = async () => {
+    if (!form.nombre) return alert('Nombre obligatorio');
+    if (!form.tipo_equipo) return alert('Tipo de equipo obligatorio');
+    const itemsLimpios = items.filter(it => (it.actividad||'').trim());
+    if (itemsLimpios.length === 0) return alert('Agrega al menos una actividad');
+    setSaving(true);
+    const url = esNuevo?`${API}/protocolos`:`${API}/protocolos/${protocolo.id}`;
+    const res = await fetch(url,{
+      method:esNuevo?'POST':'PUT',
+      headers:{'Content-Type':'application/json',Authorization:token},
+      body:JSON.stringify({...form, items: itemsLimpios})
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (data.error) return alert(data.error);
+    onSaved(); onClose();
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{width:760, maxWidth:'95vw'}}>
+        <div className="modal-header">
+          <div className="modal-title">{esNuevo?'Nuevo protocolo':'Editar protocolo'}</div>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid-2">
+            <div className="field">
+              <label>Nombre del protocolo *</label>
+              <input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Ej: Mantenimiento preventivo bomba" />
+            </div>
+            <div className="field">
+              <label>Tipo de equipo *</label>
+              <select value={form.tipo_equipo} onChange={e=>setForm({...form,tipo_equipo:e.target.value})}>
+                <option value="">Seleccionar tipo</option>
+                {tiposEquipo.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{gridColumn:'1/3'}}>
+              <label>Descripción</label>
+              <textarea value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})} placeholder="Notas o descripción del protocolo..." />
+            </div>
+            {!esNuevo && (
+              <div className="field">
+                <label>Estado</label>
+                <select value={form.activo?'true':'false'} onChange={e=>setForm({...form,activo:e.target.value==='true'})}>
+                  <option value="true">Activo</option>
+                  <option value="false">Inactivo</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:18,marginBottom:8}}>
+            <label style={{fontSize:11,color:G.textMuted,letterSpacing:1,textTransform:'uppercase',fontWeight:600}}>
+              Lista de actividades ({items.length})
+            </label>
+            <button className="btn btn-ghost" style={{fontSize:11,padding:'4px 10px'}} onClick={agregarItem}>+ Agregar actividad</button>
+          </div>
+
+          {items.length===0 ? (
+            <div style={{padding:14,textAlign:'center',background:G.input,borderRadius:6,fontSize:12,color:G.textMuted,fontStyle:'italic'}}>
+              Sin actividades. Agrega las tareas que se deben realizar en este protocolo.
+            </div>
+          ) : (
+            <div style={{maxHeight:340,overflowY:'auto',border:`1px solid ${G.cardBorder}`,borderRadius:6,padding:8}}>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'24px 1fr 30px 30px 30px',gap:6,alignItems:'center',marginBottom:6}}>
+                  <div style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted,textAlign:'center'}}>{i+1}</div>
+                  <input
+                    value={it.actividad}
+                    onChange={e=>cambiarItem(i,e.target.value)}
+                    placeholder="Descripción de la actividad..."
+                    style={{background:G.input,border:`1px solid ${G.inputBorder}`,borderRadius:4,padding:'6px 10px',color:G.text,fontSize:12,outline:'none'}}
+                  />
+                  <button className="btn btn-ghost btn-icon" onClick={()=>moverItem(i,-1)} disabled={i===0} style={{fontSize:11,opacity:i===0?0.3:1}} title="Subir">▲</button>
+                  <button className="btn btn-ghost btn-icon" onClick={()=>moverItem(i,1)} disabled={i===items.length-1} style={{fontSize:11,opacity:i===items.length-1?0.3:1}} title="Bajar">▼</button>
+                  <button className="btn btn-danger btn-icon" onClick={()=>quitarItem(i)} title="Eliminar">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={guardar} disabled={saving}>
+            {saving?'Guardando...':(esNuevo?'+ Crear protocolo':'✓ Guardar')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────
 export default function App() {
   const [token, setTokenState] = useState(() => {
@@ -653,12 +750,15 @@ export default function App() {
   const [kpis, setKpis] = useState(null);
   const [dashKpis, setDashKpis] = useState(null);
   const [repKpis, setRepKpis] = useState(null);
+  const [protocolos, setProtocolos] = useState([]);
+  const [tiposEquipo, setTiposEquipo] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [equipoSel, setEquipoSel] = useState(null);
   const [editando, setEditando] = useState(null);
   const [filtro, setFiltro] = useState('');
   const [filtroMant, setFiltroMant] = useState('TODOS');
   const [filtroRep, setFiltroRep] = useState('');
+  const [filtroProto, setFiltroProto] = useState('TODOS');
   const [modalOT, setModalOT] = useState(false);
   const [modalFin, setModalFin] = useState(null);
   const [modalTecno, setModalTecno] = useState(false);
@@ -668,12 +768,13 @@ export default function App() {
   const [modalMov, setModalMov] = useState(null);
   const [modalDetRep, setModalDetRep] = useState(null);
   const [modalImportar, setModalImportar] = useState(false);
+  const [modalProtocolo, setModalProtocolo] = useState(null);
 
   const user = token ? parseJwt(token) : null;
   const rol = user?.rol;
   const esSuperAdmin = rol === 'SuperAdmin';
 
-  const formVacio = { nombre:'',marca:'',modelo:'',serie:'',registro_invima:'',fecha_vencimiento_invima:'',clasificacion_riesgo:'',ubicacion:'',servicio:'',estado:'' };
+  const formVacio = { nombre:'',marca:'',modelo:'',serie:'',registro_invima:'',fecha_vencimiento_invima:'',clasificacion_riesgo:'',ubicacion:'',servicio:'',estado:'',tipo_equipo:'' };
   const [form, setForm] = useState(formVacio);
   const headers = { Authorization: token };
 
@@ -685,6 +786,8 @@ export default function App() {
     fetch(`${API}/dashboard/kpis`,{headers}).then(r=>r.json()).then(setDashKpis).catch(()=>{});
     fetch(`${API}/repuestos`,{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setRepuestos(d)).catch(()=>{});
     fetch(`${API}/repuestos/kpis/general`,{headers}).then(r=>r.json()).then(setRepKpis).catch(()=>{});
+    fetch(`${API}/tipos-equipo`,{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setTiposEquipo(d)).catch(()=>{});
+    if (esSuperAdmin) fetch(`${API}/protocolos`,{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setProtocolos(d)).catch(()=>{});
     if (['Admin','SuperAdmin'].includes(rol)) fetch(`${API}/usuarios`,{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setUsuarios(d)).catch(()=>{});
     if (esSuperAdmin) fetch(`${API}/instituciones`,{headers}).then(r=>r.json()).then(d=>Array.isArray(d)&&setInstituciones(d)).catch(()=>{});
   };
@@ -703,12 +806,13 @@ export default function App() {
   };
   const editar = (eq) => {
     setEditando(eq.id);
-    setForm({ nombre:eq.nombre||'',marca:eq.marca||'',modelo:eq.modelo||'',serie:eq.serie||'',registro_invima:eq.registro_invima||'',fecha_vencimiento_invima:eq.fecha_vencimiento_invima?.slice(0,10)||'',clasificacion_riesgo:eq.clasificacion_riesgo||'',ubicacion:eq.ubicacion||'',servicio:eq.servicio||'',estado:eq.estado||'' });
+    setForm({ nombre:eq.nombre||'',marca:eq.marca||'',modelo:eq.modelo||'',serie:eq.serie||'',registro_invima:eq.registro_invima||'',fecha_vencimiento_invima:eq.fecha_vencimiento_invima?.slice(0,10)||'',clasificacion_riesgo:eq.clasificacion_riesgo||'',ubicacion:eq.ubicacion||'',servicio:eq.servicio||'',estado:eq.estado||'',tipo_equipo:eq.tipo_equipo||'' });
     setSeccion('inventario');
   };
   const eliminar = (id) => { if(!window.confirm('¿Confirmar?'))return; fetch(`${API}/equipos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo()); };
   const eliminarUsuario = (id) => { if(!window.confirm('¿Eliminar?'))return; fetch(`${API}/usuarios/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo()); };
   const eliminarRepuesto = (id) => { if(!window.confirm('¿Eliminar repuesto?'))return; fetch(`${API}/repuestos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo()); };
+  const eliminarProtocolo = (id) => { if(!window.confirm('¿Eliminar protocolo?'))return; fetch(`${API}/protocolos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo()); };
   const cambiarEstadoTecno = (id,estado) => fetch(`${API}/tecnovigilancia/${id}`,{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({estado})}).then(()=>cargarTodo());
 
   const editarRepuesto = async (rep) => {
@@ -736,6 +840,7 @@ export default function App() {
   const mantFiltrados = filtroMant==='TODOS'?mantenimientos:mantenimientos.filter(m=>m.estado===filtroMant);
   const repFiltrados = repuestos.filter(r=>r.nombre?.toLowerCase().includes(filtroRep.toLowerCase())||r.codigo?.toLowerCase().includes(filtroRep.toLowerCase())||r.categoria?.toLowerCase().includes(filtroRep.toLowerCase()));
   const repStockBajo = repuestos.filter(r=>r.stock_actual<=r.stock_minimo && r.stock_minimo>0);
+  const protoFiltrados = filtroProto==='TODOS'?protocolos:protocolos.filter(p=>p.tipo_equipo===filtroProto);
 
   if (!token) return <><style>{css}</style><LoginPro setToken={setToken} /></>;
   if (esSuperAdmin && !instSeleccionada) {
@@ -750,6 +855,7 @@ export default function App() {
     { id:'repuestos', icon:'📦', label:'Repuestos' },
     { id:'historial', icon:'◷', label:'Historial' },
     ...(['Admin','SuperAdmin'].includes(rol) ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
+    ...(esSuperAdmin ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
     ...(esSuperAdmin ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
   ];
   const titulos = {
@@ -757,9 +863,11 @@ export default function App() {
     mantenimiento:'Módulo de Mantenimiento', tecnovigilancia:'Tecnovigilancia',
     repuestos:'Inventario de Repuestos', historial:'Historial / Trazabilidad',
     usuarios:'Gestión de Usuarios', instituciones:'Gestión de Instituciones',
+    protocolos:'Protocolos de Mantenimiento',
   };
   const gravBadge = (g) => g==='GRAVE'?'badge-red':g==='MODERADO'?'badge-orange':'badge-gray';
   const estadoTecnoBadge = (e) => e==='ABIERTO'?'badge-red':e==='EN_REVISION'?'badge-orange':'badge-green';
+  const tiposUnicos = [...new Set(protocolos.map(p=>p.tipo_equipo).filter(Boolean))];
 
   return (
     <>
@@ -773,6 +881,8 @@ export default function App() {
       {modalMov && <ModalMovimiento repuesto={modalMov} token={token} onClose={()=>setModalMov(null)} onSaved={cargarTodo} />}
       {modalDetRep && <ModalDetalleRepuesto repuesto={modalDetRep} token={token} onClose={()=>setModalDetRep(null)} />}
       {modalImportar && <ModalImportar token={token} equiposActuales={equipos} onClose={()=>setModalImportar(false)} onSaved={cargarTodo} />}
+      {modalProtocolo!==null && <ModalProtocolo protocolo={modalProtocolo||null} tiposEquipo={tiposEquipo} token={token} onClose={()=>setModalProtocolo(null)} onSaved={()=>{cargarTodo();setModalProtocolo(null);}} />}
+
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-logo">
@@ -810,11 +920,11 @@ export default function App() {
               {rol!=='Auditor'&&seccion==='mantenimiento'&&<button className="btn btn-primary" onClick={()=>setModalOT(true)}>+ Nueva OT</button>}
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-purple" onClick={()=>setModalImportar(true)}>📊 Importar Excel</button>}
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-primary" onClick={()=>{setEditando(null);setForm(formVacio);}}>+ Nuevo equipo</button>}
-
               {rol!=='Auditor'&&seccion==='tecnovigilancia'&&<button className="btn btn-primary" onClick={()=>setModalTecno(true)}>+ Nuevo reporte</button>}
               {rol!=='Auditor'&&seccion==='repuestos'&&<button className="btn btn-primary" onClick={()=>setModalRep(false)}>+ Nuevo repuesto</button>}
               {['Admin','SuperAdmin'].includes(rol)&&seccion==='usuarios'&&<button className="btn btn-primary" onClick={()=>setModalUsuario(false)}>+ Nuevo usuario</button>}
               {esSuperAdmin&&seccion==='instituciones'&&<button className="btn btn-primary" onClick={()=>setModalInst(false)}>+ Nueva institución</button>}
+              {esSuperAdmin&&seccion==='protocolos'&&<button className="btn btn-primary" onClick={()=>setModalProtocolo(false)}>+ Nuevo protocolo</button>}
             </div>
           </div>
 
@@ -842,16 +952,43 @@ export default function App() {
                 {[{label:'Total',valor:total,cls:'blue'},{label:'Activos',valor:activos,cls:'green'},{label:'Por vencer',valor:porVencer,cls:'orange'},{label:'Vencido',valor:vencidos,cls:'red'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}
               </div>
               {alertas.length>0&&<div className="alert-bar"><span className="alert-icon">⚠</span><div><div className="alert-title">Mantenimientos críticos ({alertas.length})</div>{alertas.map(a=><div key={a.id} className="alert-item">{a.equipo_nombre} — {formatFecha(a.fecha_programada)}</div>)}</div></div>}
-              {rol!=='Auditor'&&<div className="panel"><div className="panel-header"><div className="panel-title">{editando?'Editar equipo':'Registrar equipo'}</div>{editando&&<button className="btn btn-ghost btn-icon" onClick={()=>{setEditando(null);setForm(formVacio);}}>✕</button>}</div><div className="panel-body"><div className="form-grid">{[['nombre','Nombre'],['marca','Marca'],['modelo','Modelo'],['serie','Serie'],['registro_invima','Reg. INVIMA'],['fecha_vencimiento_invima','Venc. INVIMA','date'],['ubicacion','Ubicación'],['servicio','Servicio']].map(([key,label,type='text'])=>(<div className="field" key={key}><label>{label}</label><input type={type} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} /></div>))}<div className="field"><label>Riesgo</label><select value={form.clasificacion_riesgo} onChange={e=>setForm({...form,clasificacion_riesgo:e.target.value})}><option value="">Seleccionar</option>{['I','IIa','IIb','III'].map(c=><option key={c} value={c}>Clase {c}</option>)}</select></div><div className="field"><label>Estado</label><select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option value="">Seleccionar</option><option value="Activo">Activo</option><option value="Mantenimiento">En mantenimiento</option><option value="Baja">Dado de baja</option></select></div></div><button className="btn btn-primary" onClick={guardar}>{editando?'✓ Guardar':'+ Registrar'}</button></div></div>}
+              {rol!=='Auditor' && (
+                <div className="panel">
+                  <div className="panel-header">
+                    <div className="panel-title">{editando?'Editar equipo':'Registrar equipo'}</div>
+                    {editando&&<button className="btn btn-ghost btn-icon" onClick={()=>{setEditando(null);setForm(formVacio);}}>✕</button>}
+                  </div>
+                  <div className="panel-body">
+                    <div className="form-grid">
+                      {[['nombre','Nombre'],['marca','Marca'],['modelo','Modelo'],['serie','Serie'],['registro_invima','Reg. INVIMA'],['fecha_vencimiento_invima','Venc. INVIMA','date'],['ubicacion','Ubicación'],['servicio','Servicio']].map(([key,label,type='text'])=>(
+                        <div className="field" key={key}>
+                          <label>{label}</label>
+                          <input type={type} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} />
+                        </div>
+                      ))}
+                      <div className="field">
+                        <label>Tipo de equipo</label>
+                        <select value={form.tipo_equipo||''} onChange={e=>setForm({...form,tipo_equipo:e.target.value})}>
+                          <option value="">Seleccionar tipo</option>
+                          {tiposEquipo.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="field"><label>Riesgo</label><select value={form.clasificacion_riesgo} onChange={e=>setForm({...form,clasificacion_riesgo:e.target.value})}><option value="">Seleccionar</option>{['I','IIa','IIb','III'].map(c=><option key={c} value={c}>Clase {c}</option>)}</select></div>
+                      <div className="field"><label>Estado</label><select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option value="">Seleccionar</option><option value="Activo">Activo</option><option value="Mantenimiento">En mantenimiento</option><option value="Baja">Dado de baja</option></select></div>
+                    </div>
+                    <button className="btn btn-primary" onClick={guardar}>{editando?'✓ Guardar':'+ Registrar'}</button>
+                  </div>
+                </div>
+              )}
               <div className="search-bar"><span>⌕</span><input placeholder="Buscar..." value={filtro} onChange={e=>setFiltro(e.target.value)} /></div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>{filtrados.length===0?<div className="empty-state">Sin equipos</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Marca/Modelo</th><th>Serie</th><th>INVIMA</th><th>Vencimiento</th><th>Riesgo</th><th>Servicio</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{filtrados.map(eq=>{const inv=getEstadoInvima(eq.fecha_vencimiento_invima);const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';return <tr key={eq.id}><td style={{fontWeight:500}}>{eq.nombre}</td><td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td><td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td><td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td><td style={{color:G.textMuted}}>{eq.servicio||'—'}</td><td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>{rol!=='Auditor'&&<><button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button><button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button></>}</div></td></tr>;})}</tbody></table>}</div>
+              <div className="panel"><div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>{filtrados.length===0?<div className="empty-state">Sin equipos</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Marca/Modelo</th><th>Serie</th><th>INVIMA</th><th>Vencimiento</th><th>Riesgo</th><th>Servicio</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{filtrados.map(eq=>{const inv=getEstadoInvima(eq.fecha_vencimiento_invima);const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';return <tr key={eq.id}><td style={{fontWeight:500}}>{eq.nombre}</td><td>{eq.tipo_equipo?<span className="badge badge-purple">{eq.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td><td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td><td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td><td style={{color:G.textMuted}}>{eq.servicio||'—'}</td><td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>{rol!=='Auditor'&&<><button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button><button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button></>}</div></td></tr>;})}</tbody></table>}</div>
             </>)}
 
             {seccion==='mantenimiento' && (<>
               <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:16,marginBottom:24}}>{[{label:'Total',valor:kpis?.total??'—',cls:'blue'},{label:'Pendientes',valor:kpis?.pendientes??'—',cls:'orange'},{label:'Realizados',valor:kpis?.realizados??'—',cls:'green'},{label:'Críticas',valor:kpis?.criticas??'—',cls:'red'},{label:'MTTR días',valor:kpis?.mttr??'—',cls:'purple'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
               {alertas.length>0&&<div className="alert-bar"><span className="alert-icon">⚠</span><div><div className="alert-title">OTs ≤7 días</div>{alertas.map(a=><div key={a.id} className="alert-item">{a.equipo_nombre} · {formatFecha(a.fecha_programada)}</div>)}</div></div>}
               <div style={{display:'flex',gap:8,marginBottom:16}}>{['TODOS','PENDIENTE','REALIZADO'].map(f=><button key={f} className={`btn ${filtroMant===f?'btn-primary':'btn-ghost'}`} style={{fontSize:11}} onClick={()=>setFiltroMant(f)}>{f}</button>)}</div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Órdenes</div><span className="badge badge-gray">{mantFiltrados.length}</span></div>{mantFiltrados.length===0?<div className="empty-state">Sin órdenes</div>:<table className="data-table"><thead><tr><th>Equipo</th><th>Servicio</th><th>Tipo</th><th>Prioridad</th><th>Programado</th><th>Realizado</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{mantFiltrados.map(m=>(<tr key={m.id}><td style={{fontWeight:500}}>{m.equipo_nombre}</td><td style={{color:G.textMuted,fontSize:11}}>{m.equipo_servicio||'—'}</td><td><span className="badge badge-gray">{m.tipo}</span></td><td><span className={`badge ${prioridadBadge(m.prioridad)}`}>{m.prioridad}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(m.fecha_programada)}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{m.fecha_realizada?formatFecha(m.fecha_realizada):'—'}</td><td><span className={`badge ${m.estado==='PENDIENTE'?'badge-orange':'badge-green'}`}>{m.estado}</span></td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{m.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td>{m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)}>✓</button>}</td>}</tr>))}</tbody></table>}</div>
+              <div className="panel"><div className="panel-header"><div className="panel-title">Órdenes</div><span className="badge badge-gray">{mantFiltrados.length}</span></div>{mantFiltrados.length===0?<div className="empty-state">Sin órdenes</div>:<table className="data-table"><thead><tr><th>Equipo</th><th>Tipo Equipo</th><th>Servicio</th><th>Tipo</th><th>Prioridad</th><th>Programado</th><th>Realizado</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{mantFiltrados.map(m=>(<tr key={m.id}><td style={{fontWeight:500}}>{m.equipo_nombre}</td><td>{m.tipo_equipo?<span className="badge badge-purple">{m.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted,fontSize:11}}>{m.equipo_servicio||'—'}</td><td><span className="badge badge-gray">{m.tipo}</span></td><td><span className={`badge ${prioridadBadge(m.prioridad)}`}>{m.prioridad}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(m.fecha_programada)}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{m.fecha_realizada?formatFecha(m.fecha_realizada):'—'}</td><td><span className={`badge ${m.estado==='PENDIENTE'?'badge-orange':'badge-green'}`}>{m.estado}</span></td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{m.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td>{m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)}>✓</button>}</td>}</tr>))}</tbody></table>}</div>
             </>)}
 
             {seccion==='tecnovigilancia' && (<>
@@ -859,7 +996,6 @@ export default function App() {
               <div className="panel"><div className="panel-header"><div className="panel-title">Reportes</div><span className="badge badge-gray">{tecno.length}</span></div>{tecno.length===0?<div className="empty-state">Sin reportes</div>:<table className="data-table"><thead><tr><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Gravedad</th><th>Estado</th><th>Reportado</th><th>Descripción</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{tecno.map(t=>(<tr key={t.id}><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(t.fecha_evento)}</td><td style={{fontWeight:500}}>{t.equipo_nombre||'General'}</td><td><span className="badge badge-gray">{t.tipo}</span></td><td><span className={`badge ${gravBadge(t.gravedad)}`}>{t.gravedad}</span></td><td><span className={`badge ${estadoTecnoBadge(t.estado)}`}>{t.estado}</span></td><td style={{color:G.textMuted,fontSize:11}}>{t.reportado_nombre||'—'}</td><td style={{color:G.textMuted,fontSize:11,maxWidth:200}}>{t.descripcion}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{t.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td><div style={{display:'flex',gap:4}}>{t.estado==='ABIERTO'&&<button className="btn btn-ghost btn-icon" style={{fontSize:10}} onClick={()=>cambiarEstadoTecno(t.id,'EN_REVISION')}>Revisar</button>}{t.estado==='EN_REVISION'&&<button className="btn btn-primary btn-icon" style={{fontSize:10}} onClick={()=>cambiarEstadoTecno(t.id,'CERRADO')}>Cerrar</button>}</div></td>}</tr>))}</tbody></table>}</div>
             </>)}
 
-            {/* ═══ REPUESTOS ═══ */}
             {seccion==='repuestos' && (<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
                 {[
@@ -869,7 +1005,6 @@ export default function App() {
                   {label:'Valor Total',valor:fmtMoney(repKpis?.valorTotal||0),cls:'green'},
                 ].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value" style={{fontSize:k.label==='Valor Total'?16:28}}>{k.valor}</div></div>)}
               </div>
-
               {repStockBajo.length>0 && (
                 <div className="alert-bar"><span className="alert-icon">⚠</span>
                   <div><div className="alert-title">Stock Bajo ({repStockBajo.length} repuestos)</div>
@@ -877,9 +1012,7 @@ export default function App() {
                   {repStockBajo.length>5&&<div className="alert-item">... y {repStockBajo.length-5} más</div>}</div>
                 </div>
               )}
-
               <div className="search-bar"><span>⌕</span><input placeholder="Buscar repuesto..." value={filtroRep} onChange={e=>setFiltroRep(e.target.value)} /></div>
-
               <div className="panel">
                 <div className="panel-header"><div className="panel-title">Repuestos</div><span className="badge badge-gray">{repFiltrados.length}</span></div>
                 {repFiltrados.length===0 ? <div className="empty-state">Sin repuestos</div> : (
@@ -929,14 +1062,68 @@ export default function App() {
               <div className="panel"><div className="panel-header"><div className="panel-title">Usuarios</div><span className="badge badge-gray">{usuarios.length}</span></div>{usuarios.length===0?<div className="empty-state">Sin usuarios</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Creado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{usuarios.map(u=>(<tr key={u.id}><td style={{fontWeight:500}}>{u.nombre}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{u.email}</td><td><span className={`badge ${u.rol==='Admin'||u.rol==='SuperAdmin'?'badge-purple':u.rol==='Auditor'?'badge-gray':'badge-green'}`}>{u.rol}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{formatFecha(u.creado_en)}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{u.institucion_nombre||'Global'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalUsuario(u)}>✎</button>{u.id!==user?.id&&<button className="btn btn-danger btn-icon" onClick={()=>eliminarUsuario(u.id)}>✕</button>}</div></td></tr>))}</tbody></table>}</div>
             </>)}
 
+            {seccion==='protocolos'&&esSuperAdmin&&(<>
+              <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+                {[
+                  {label:'Total Protocolos',valor:protocolos.length,cls:'blue'},
+                  {label:'Activos',valor:protocolos.filter(p=>p.activo).length,cls:'green'},
+                  {label:'Inactivos',valor:protocolos.filter(p=>!p.activo).length,cls:'gray'},
+                  {label:'Tipos cubiertos',valor:tiposUnicos.length,cls:'purple'},
+                ].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}
+              </div>
+
+              <div style={{padding:'14px 16px',background:'rgba(167,139,250,0.06)',border:'1px solid rgba(167,139,250,0.2)',borderRadius:6,marginBottom:16,fontSize:12,color:G.textMuted}}>
+                💡 Los protocolos definen la lista de actividades a realizar durante el mantenimiento de cada tipo de equipo. Se asocian automáticamente al crear un reporte de mantenimiento según el tipo del equipo.
+              </div>
+
+              <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+                <button className={`btn ${filtroProto==='TODOS'?'btn-primary':'btn-ghost'}`} style={{fontSize:11}} onClick={()=>setFiltroProto('TODOS')}>TODOS</button>
+                {tiposUnicos.map(t=>(
+                  <button key={t} className={`btn ${filtroProto===t?'btn-primary':'btn-ghost'}`} style={{fontSize:11}} onClick={()=>setFiltroProto(t)}>{t}</button>
+                ))}
+              </div>
+
+              <div className="panel">
+                <div className="panel-header"><div className="panel-title">Protocolos</div><span className="badge badge-gray">{protoFiltrados.length}</span></div>
+                {protoFiltrados.length===0 ? (
+                  <div className="empty-state">
+                    {protocolos.length===0 ? 'Aún no hay protocolos. Crea el primero con el botón "+ Nuevo protocolo"' : 'Sin protocolos para este tipo'}
+                  </div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr>
+                      <th>Nombre</th><th>Tipo de equipo</th><th>Descripción</th><th>Estado</th><th>Creado</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                      {protoFiltrados.map(p=>(
+                        <tr key={p.id}>
+                          <td style={{fontWeight:500}}>📋 {p.nombre}</td>
+                          <td><span className="badge badge-purple">{p.tipo_equipo||'Sin tipo'}</span></td>
+                          <td style={{color:G.textMuted,fontSize:11,maxWidth:280}}>{p.descripcion||'—'}</td>
+                          <td><span className={`badge ${p.activo?'badge-green':'badge-gray'}`}>{p.activo?'ACTIVO':'INACTIVO'}</span></td>
+                          <td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{formatFecha(p.created_at)}</td>
+                          <td><div style={{display:'flex',gap:4}}>
+                            <button className="btn btn-ghost btn-icon" onClick={()=>setModalProtocolo(p)} title="Editar">✎</button>
+                            <button className="btn btn-danger btn-icon" onClick={()=>eliminarProtocolo(p.id)} title="Eliminar">✕</button>
+                          </div></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>)}
+
             {seccion==='instituciones'&&esSuperAdmin&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(3,1fr)'}}>{[{label:'Total',valor:instituciones.length,cls:'blue'},{label:'Activas',valor:instituciones.filter(i=>i.activa).length,cls:'green'},{label:'Inactivas',valor:instituciones.filter(i=>!i.activa).length,cls:'red'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Instituciones</div><span className="badge badge-gray">{instituciones.length}</span></div>{instituciones.length===0?<div className="empty-state">Sin instituciones</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Tel</th><th>Email</th><th>REPS</th><th>Estado</th><th></th></tr></thead><tbody>{instituciones.map(inst=>(<tr key={inst.id}><td style={{fontWeight:500}}>
-  <div style={{display:'flex',alignItems:'center',gap:8}}>
-    {inst.logo_url ? <img src={inst.logo_url} alt="" style={{width:24,height:24,objectFit:'contain',borderRadius:4,background:G.bg}} /> : <span>🏥</span>}
-    {inst.nombre}
-  </div>
-</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button><button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button></div></td></tr>))}</tbody></table>}</div>
+              <div className="panel"><div className="panel-header"><div className="panel-title">Instituciones</div><span className="badge badge-gray">{instituciones.length}</span></div>{instituciones.length===0?<div className="empty-state">Sin instituciones</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Tel</th><th>Email</th><th>REPS</th><th>Estado</th><th></th></tr></thead><tbody>{instituciones.map(inst=>(<tr key={inst.id}>
+                <td style={{fontWeight:500}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    {inst.logo_url ? <img src={inst.logo_url} alt="" style={{width:24,height:24,objectFit:'contain',borderRadius:4,background:G.bg}} /> : <span>🏥</span>}
+                    {inst.nombre}
+                  </div>
+                </td>
+                <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button><button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button></div></td></tr>))}</tbody></table>}</div>
             </>)}
 
           </div>
