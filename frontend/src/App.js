@@ -1,11 +1,10 @@
-import ModalImportar from './ModalImportar';
-import ModalReporte from './ModalReporte';
 import { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import ModalImportar from './ModalImportar';
+import ModalReporte from './ModalReporte';
 
 const API = 'https://his-biomedico-production.up.railway.app';
 
