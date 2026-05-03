@@ -67,10 +67,13 @@ app.get('/instituciones/mia', authMiddleware, async (req, res) => {
 });
 app.post('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
-    const { nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps } = req.body;
+    const { nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps,
+            doc_inventario_codigo, doc_inventario_version, doc_inventario_vigencia } = req.body;
     const result = await pool.query(
-      `INSERT INTO instituciones (nombre,nit,direccion,ciudad,telefono,email,logo_url,codigo_reps) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps]
+      `INSERT INTO instituciones (nombre,nit,direccion,ciudad,telefono,email,logo_url,codigo_reps,doc_inventario_codigo,doc_inventario_version,doc_inventario_vigencia)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps,
+       doc_inventario_codigo||'GTE-FR-001', doc_inventario_version||'2', doc_inventario_vigencia||'2026-12-31']
     );
     res.json(result.rows[0]);
   } catch(e) {
@@ -81,10 +84,13 @@ app.post('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
 app.put('/instituciones/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps, activa } = req.body;
+    const { nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps, activa,
+            doc_inventario_codigo, doc_inventario_version, doc_inventario_vigencia } = req.body;
     await pool.query(
-      `UPDATE instituciones SET nombre=$1,nit=$2,direccion=$3,ciudad=$4,telefono=$5,email=$6,logo_url=$7,codigo_reps=$8,activa=$9 WHERE id=$10`,
-      [nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps, activa, id]
+      `UPDATE instituciones SET nombre=$1,nit=$2,direccion=$3,ciudad=$4,telefono=$5,email=$6,logo_url=$7,codigo_reps=$8,activa=$9,
+       doc_inventario_codigo=$10,doc_inventario_version=$11,doc_inventario_vigencia=$12 WHERE id=$13`,
+      [nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps, activa,
+       doc_inventario_codigo||'GTE-FR-001', doc_inventario_version||'2', doc_inventario_vigencia||'2026-12-31', id]
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -183,9 +189,9 @@ app.post('/equipos', authMiddleware, async (req, res) => {
   const data = req.body;
   const instId = req.user.institucion_id || null;
   const result = await pool.query(
-    `INSERT INTO equipos_biomedicos (nombre,marca,modelo,serie,registro_invima,fecha_vencimiento_invima,clasificacion_riesgo,ubicacion,servicio,estado,tipo_equipo,institucion_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,data.tipo_equipo||null,instId]
+    `INSERT INTO equipos_biomedicos (nombre,marca,modelo,serie,registro_invima,fecha_vencimiento_invima,clasificacion_riesgo,ubicacion,servicio,estado,tipo_equipo,activo_fijo,garantia,garantia_vencimiento,institucion_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima||null,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,data.tipo_equipo||null,data.activo_fijo||null,!!data.garantia,data.garantia_vencimiento||null,instId]
   );
   const equipo = result.rows[0];
   await registrarAuditoria(req,'CREAR','EQUIPOS',equipo.id);
@@ -195,8 +201,8 @@ app.post('/equipos', authMiddleware, async (req, res) => {
 app.put('/equipos/:id', authMiddleware, async (req, res) => {
   const { id } = req.params; const data = req.body;
   await pool.query(
-    `UPDATE equipos_biomedicos SET nombre=$1,marca=$2,modelo=$3,serie=$4,registro_invima=$5,fecha_vencimiento_invima=$6,clasificacion_riesgo=$7,ubicacion=$8,servicio=$9,estado=$10,tipo_equipo=$11 WHERE id=$12`,
-    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,data.tipo_equipo||null,id]
+    `UPDATE equipos_biomedicos SET nombre=$1,marca=$2,modelo=$3,serie=$4,registro_invima=$5,fecha_vencimiento_invima=$6,clasificacion_riesgo=$7,ubicacion=$8,servicio=$9,estado=$10,tipo_equipo=$11,activo_fijo=$12,garantia=$13,garantia_vencimiento=$14 WHERE id=$15`,
+    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima||null,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,data.tipo_equipo||null,data.activo_fijo||null,!!data.garantia,data.garantia_vencimiento||null,id]
   );
   await registrarAuditoria(req,'EDITAR','EQUIPOS',id);
   await registrarHistorial(id,'EDICIÓN','Equipo actualizado',req.user.institucion_id);
