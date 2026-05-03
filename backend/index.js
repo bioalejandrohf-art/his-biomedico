@@ -10,7 +10,7 @@ const pool = require('./db');
 const SECRET = process.env.SECRET || 'clave_super_segura';
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '20mb' })); // firmas en base64 pesan más
+app.use(express.json({ limit: '20mb' }));
 
 app.get('/', (req, res) => res.send('Servidor funcionando 🚀'));
 
@@ -355,7 +355,7 @@ app.put('/mantenimientos/:id', authMiddleware, async (req, res) => {
     const m = await client.query('SELECT * FROM mantenimientos WHERE id=$1',[id]);
     if (!m.rows.length) return res.status(404).json({ error: 'OT no encontrada' });
     await client.query('BEGIN');
-    await client.query(`UPDATE mantenimientos SET estado='REALIZADO',fecha_realizada=NOW(),observaciones=$1 WHERE id=$2`,[observaciones||null, id]);
+    await client.query(`UPDATE mantenimientos SET estado='REALIZADO',fecha_realizada=NOW(),observaciones=$1,realizado_por=$2 WHERE id=$3`,[observaciones||null, req.user.id, id]);
     if (Array.isArray(repuestos_usados) && repuestos_usados.length>0) {
       for (const r of repuestos_usados) {
         if (!r.repuesto_id || !r.cantidad || r.cantidad<=0) continue;
@@ -416,8 +416,6 @@ const ITEMS_RECEPCION = [
   '12. Condiciones de limpieza',
   '13. Sello de garantía'
 ];
-
-// Crear o actualizar reporte completo (viene todo en un solo POST/PUT)
 app.post('/reportes-mantenimiento', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -426,17 +424,11 @@ app.post('/reportes-mantenimiento', authMiddleware, async (req, res) => {
       protocolo_id, obs_recepcion, trabajo_realizado, obs_entrega, repuestos_texto,
       resp_servicio_nombre, resp_servicio_cc, resp_servicio_cargo, resp_servicio_firma,
       resp_recepcion_nombre, resp_recepcion_cc, resp_recepcion_cargo, resp_recepcion_firma,
-      recepcion, // [{item_numero, estado}]
-      entrega,   // [{item_numero, estado}]
-      actividades, // [{orden, actividad, realizado, observaciones}]
-      fotos      // [{url, descripcion}]
+      recepcion, entrega, actividades, fotos
     } = req.body;
-
     if (!mantenimiento_id) return res.status(400).json({ error: 'mantenimiento_id obligatorio' });
     const instId = req.user.institucion_id || null;
     await client.query('BEGIN');
-
-    // ¿ya existe un reporte para esta OT?
     const existe = await client.query('SELECT id FROM reportes_mantenimiento WHERE mantenimiento_id=$1', [mantenimiento_id]);
     let reporteId;
     if (existe.rows.length) {
@@ -471,56 +463,35 @@ app.post('/reportes-mantenimiento', authMiddleware, async (req, res) => {
       );
       reporteId = r.rows[0].id;
     }
-
-    // Recepción
     if (Array.isArray(recepcion)) {
       for (let i=0; i<recepcion.length; i++) {
         const it = recepcion[i];
         const numero = it.item_numero || (i+1);
         const texto = it.item_texto || ITEMS_RECEPCION[numero-1] || '';
-        await client.query(
-          `INSERT INTO reporte_recepcion (reporte_id,item_numero,item_texto,estado) VALUES ($1,$2,$3,$4)`,
-          [reporteId, numero, texto, it.estado || null]
-        );
+        await client.query(`INSERT INTO reporte_recepcion (reporte_id,item_numero,item_texto,estado) VALUES ($1,$2,$3,$4)`,[reporteId, numero, texto, it.estado || null]);
       }
     }
-
-    // Entrega
     if (Array.isArray(entrega)) {
       for (let i=0; i<entrega.length; i++) {
         const it = entrega[i];
         const numero = it.item_numero || (i+1);
         const texto = it.item_texto || ITEMS_RECEPCION[numero-1] || '';
-        await client.query(
-          `INSERT INTO reporte_entrega (reporte_id,item_numero,item_texto,estado) VALUES ($1,$2,$3,$4)`,
-          [reporteId, numero, texto, it.estado || null]
-        );
+        await client.query(`INSERT INTO reporte_entrega (reporte_id,item_numero,item_texto,estado) VALUES ($1,$2,$3,$4)`,[reporteId, numero, texto, it.estado || null]);
       }
     }
-
-    // Actividades
     if (Array.isArray(actividades)) {
       for (let i=0; i<actividades.length; i++) {
         const a = actividades[i];
-        await client.query(
-          `INSERT INTO reporte_actividades (reporte_id,orden,actividad,realizado,observaciones) VALUES ($1,$2,$3,$4,$5)`,
-          [reporteId, a.orden??i, a.actividad||'', !!a.realizado, a.observaciones||null]
-        );
+        await client.query(`INSERT INTO reporte_actividades (reporte_id,orden,actividad,realizado,observaciones) VALUES ($1,$2,$3,$4,$5)`,[reporteId, a.orden??i, a.actividad||'', !!a.realizado, a.observaciones||null]);
       }
     }
-
-    // Fotos
     if (Array.isArray(fotos)) {
       for (let i=0; i<fotos.length; i++) {
         const f = fotos[i];
         if (!f.url) continue;
-        await client.query(
-          `INSERT INTO reporte_fotos (reporte_id,url,descripcion,orden) VALUES ($1,$2,$3,$4)`,
-          [reporteId, f.url, f.descripcion||null, i]
-        );
+        await client.query(`INSERT INTO reporte_fotos (reporte_id,url,descripcion,orden) VALUES ($1,$2,$3,$4)`,[reporteId, f.url, f.descripcion||null, i]);
       }
     }
-
     await client.query('COMMIT');
     await registrarAuditoria(req,'GUARDAR','REPORTE',reporteId);
     res.json({ ok: true, id: reporteId });
@@ -529,8 +500,6 @@ app.post('/reportes-mantenimiento', authMiddleware, async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally { client.release(); }
 });
-
-// Obtener reporte por ID de mantenimiento
 app.get('/reportes-mantenimiento/por-ot/:mant_id', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
@@ -565,8 +534,8 @@ app.get('/reportes-mantenimiento/por-ot/:mant_id', authMiddleware, async (req, r
 app.get('/tecnovigilancia', authMiddleware, async (req, res) => {
   const instId = filtroInstitucion(req);
   const q = instId
-    ? `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por WHERE t.institucion_id=$1 ORDER BY t.created_at DESC`
-    : `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre,i.nombre AS institucion_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por LEFT JOIN instituciones i ON i.id=t.institucion_id ORDER BY t.created_at DESC`;
+    ? `SELECT t.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,u.nombre AS reportado_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por WHERE t.institucion_id=$1 ORDER BY t.created_at DESC`
+    : `SELECT t.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,u.nombre AS reportado_nombre,i.nombre AS institucion_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por LEFT JOIN instituciones i ON i.id=t.institucion_id ORDER BY t.created_at DESC`;
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
@@ -741,6 +710,500 @@ app.get('/dashboard/kpis', authMiddleware, async (req, res) => {
 });
 
 //////////////////////////////////////////////////
+// 📈 INDICADORES DE GESTIÓN AVANZADOS
+//////////////////////////////////////////////////
+
+// Función helper para construir el filtro de fechas
+const filtroFecha = (campo, dias) => `${campo} >= NOW() - INTERVAL '${parseInt(dias)||90} days'`;
+
+// 1. CUMPLIMIENTO DE MANTENIMIENTOS PREVENTIVOS (programados vs realizados)
+app.get('/indicadores/cumplimiento', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const dias = parseInt(req.query.dias) || 90;
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'AND m.institucion_id=$1' : '';
+
+    // Cumplimiento global
+    const global = await pool.query(
+      `SELECT 
+        COUNT(*) AS programados,
+        SUM(CASE WHEN estado='REALIZADO' THEN 1 ELSE 0 END) AS realizados,
+        SUM(CASE WHEN estado='REALIZADO' AND fecha_realizada <= fecha_programada + INTERVAL '5 days' THEN 1 ELSE 0 END) AS a_tiempo,
+        SUM(CASE WHEN estado='PENDIENTE' AND fecha_programada < NOW() THEN 1 ELSE 0 END) AS atrasados
+       FROM mantenimientos m
+       WHERE ${filtroFecha('m.fecha_programada', dias)} ${wInst}`,
+      params
+    );
+
+    // Por servicio
+    const porServicio = await pool.query(
+      `SELECT 
+        COALESCE(e.servicio, 'Sin servicio') AS servicio,
+        COUNT(m.id) AS programados,
+        SUM(CASE WHEN m.estado='REALIZADO' THEN 1 ELSE 0 END) AS realizados,
+        ROUND(SUM(CASE WHEN m.estado='REALIZADO' THEN 1 ELSE 0 END)::numeric * 100 / NULLIF(COUNT(m.id),0), 1) AS porcentaje
+       FROM mantenimientos m
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE ${filtroFecha('m.fecha_programada', dias)} ${wInst}
+       GROUP BY e.servicio
+       ORDER BY programados DESC`,
+      params
+    );
+
+    // Por tipo de equipo
+    const porTipo = await pool.query(
+      `SELECT 
+        COALESCE(e.tipo_equipo, 'Sin tipo') AS tipo,
+        COUNT(m.id) AS programados,
+        SUM(CASE WHEN m.estado='REALIZADO' THEN 1 ELSE 0 END) AS realizados,
+        ROUND(SUM(CASE WHEN m.estado='REALIZADO' THEN 1 ELSE 0 END)::numeric * 100 / NULLIF(COUNT(m.id),0), 1) AS porcentaje
+       FROM mantenimientos m
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE ${filtroFecha('m.fecha_programada', dias)} ${wInst}
+       GROUP BY e.tipo_equipo
+       ORDER BY programados DESC
+       LIMIT 10`,
+      params
+    );
+
+    // Tendencia mensual
+    const tendencia = await pool.query(
+      `SELECT 
+        TO_CHAR(DATE_TRUNC('month', m.fecha_programada), 'Mon YY') AS mes,
+        DATE_TRUNC('month', m.fecha_programada) AS orden,
+        COUNT(*) AS programados,
+        SUM(CASE WHEN m.estado='REALIZADO' THEN 1 ELSE 0 END) AS realizados
+       FROM mantenimientos m
+       WHERE ${filtroFecha('m.fecha_programada', dias)} ${wInst}
+       GROUP BY DATE_TRUNC('month', m.fecha_programada)
+       ORDER BY orden`,
+      params
+    );
+
+    const g = global.rows[0];
+    const cumplimiento = g.programados > 0 ? Math.round((g.realizados / g.programados) * 100) : 0;
+    const aTiempo = g.programados > 0 ? Math.round((g.a_tiempo / g.programados) * 100) : 0;
+
+    res.json({
+      programados: parseInt(g.programados),
+      realizados: parseInt(g.realizados),
+      atrasados: parseInt(g.atrasados),
+      cumplimiento,
+      aTiempo,
+      porServicio: porServicio.rows,
+      porTipo: porTipo.rows,
+      tendencia: tendencia.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 2. MTBF / MTTR / DISPONIBILIDAD
+app.get('/indicadores/disponibilidad', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const dias = parseInt(req.query.dias) || 90;
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'AND m.institucion_id=$1' : '';
+    const wInstE = instId ? 'WHERE e.institucion_id=$1' : '';
+
+    // MTTR global (tiempo promedio en días para reparar)
+    const mttr = await pool.query(
+      `SELECT ROUND(AVG(EXTRACT(EPOCH FROM (fecha_realizada - fecha_programada))/86400)::numeric, 1) AS mttr
+       FROM mantenimientos m
+       WHERE estado='REALIZADO' AND fecha_realizada IS NOT NULL 
+       AND ${filtroFecha('m.fecha_realizada', dias)} ${wInst}`,
+      params
+    );
+
+    // MTBF estimado (días promedio entre fallas correctivas por equipo)
+    const mtbf = await pool.query(
+      `SELECT ROUND(AVG(intervalo)::numeric, 1) AS mtbf FROM (
+         SELECT EXTRACT(EPOCH FROM (fecha_programada - LAG(fecha_programada) OVER (PARTITION BY equipo_id ORDER BY fecha_programada)))/86400 AS intervalo
+         FROM mantenimientos m
+         WHERE tipo IN ('Correctivo','correctivo','CORRECTIVO') ${wInst}
+       ) t WHERE intervalo IS NOT NULL`,
+      params
+    );
+
+    // Disponibilidad (% de equipos activos)
+    const dispo = await pool.query(
+      `SELECT 
+        COUNT(*) AS total,
+        SUM(CASE WHEN estado='Activo' THEN 1 ELSE 0 END) AS activos,
+        SUM(CASE WHEN estado='Mantenimiento' THEN 1 ELSE 0 END) AS en_mant,
+        SUM(CASE WHEN estado='Baja' THEN 1 ELSE 0 END) AS baja
+       FROM equipos_biomedicos e ${wInstE}`,
+      params
+    );
+
+    // MTTR por servicio
+    const mttrServicio = await pool.query(
+      `SELECT 
+        COALESCE(e.servicio, 'Sin servicio') AS servicio,
+        ROUND(AVG(EXTRACT(EPOCH FROM (m.fecha_realizada - m.fecha_programada))/86400)::numeric, 1) AS mttr,
+        COUNT(*) AS total
+       FROM mantenimientos m
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE m.estado='REALIZADO' AND m.fecha_realizada IS NOT NULL 
+       AND ${filtroFecha('m.fecha_realizada', dias)} ${wInst}
+       GROUP BY e.servicio
+       ORDER BY mttr DESC NULLS LAST
+       LIMIT 10`,
+      params
+    );
+
+    // Top equipos con más fallas correctivas
+    const topFallas = await pool.query(
+      `SELECT 
+        e.id, e.nombre, e.marca, e.modelo, e.servicio,
+        COUNT(m.id) AS fallas
+       FROM mantenimientos m
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE m.tipo IN ('Correctivo','correctivo','CORRECTIVO') 
+       AND ${filtroFecha('m.fecha_programada', dias)} ${wInst}
+       GROUP BY e.id, e.nombre, e.marca, e.modelo, e.servicio
+       ORDER BY fallas DESC
+       LIMIT 10`,
+      params
+    );
+
+    const d = dispo.rows[0];
+    const disponibilidad = d.total > 0 ? Math.round((d.activos / d.total) * 100) : 0;
+
+    res.json({
+      mttr: parseFloat(mttr.rows[0]?.mttr) || 0,
+      mtbf: parseFloat(mtbf.rows[0]?.mtbf) || 0,
+      disponibilidad,
+      total: parseInt(d.total),
+      activos: parseInt(d.activos),
+      enMant: parseInt(d.en_mant),
+      baja: parseInt(d.baja),
+      mttrServicio: mttrServicio.rows,
+      topFallas: topFallas.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 3. PRODUCTIVIDAD POR TÉCNICO
+app.get('/indicadores/productividad', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const dias = parseInt(req.query.dias) || 90;
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'AND m.institucion_id=$1' : '';
+
+    const tecnicos = await pool.query(
+      `SELECT 
+        u.id, u.nombre, u.rol,
+        COUNT(m.id) AS total_ots,
+        ROUND(AVG(EXTRACT(EPOCH FROM (m.fecha_realizada - m.fecha_programada))/86400)::numeric, 1) AS promedio_dias,
+        SUM(CASE WHEN m.fecha_realizada <= m.fecha_programada + INTERVAL '3 days' THEN 1 ELSE 0 END) AS a_tiempo
+       FROM usuarios u
+       LEFT JOIN mantenimientos m ON m.realizado_por = u.id 
+         AND m.estado='REALIZADO' 
+         AND ${filtroFecha('m.fecha_realizada', dias)} ${wInst}
+       WHERE u.rol IN ('Biomedico','Ingeniero','Admin') 
+       ${instId ? 'AND (u.institucion_id=$1 OR u.rol=\'Admin\')' : ''}
+       GROUP BY u.id, u.nombre, u.rol
+       HAVING COUNT(m.id) > 0
+       ORDER BY total_ots DESC`,
+      params
+    );
+
+    res.json({ tecnicos: tecnicos.rows });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 4. ANÁLISIS DE COSTOS
+app.get('/indicadores/costos', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const dias = parseInt(req.query.dias) || 90;
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'AND m.institucion_id=$1' : '';
+
+    // Gasto total en repuestos en OTs
+    const gasto = await pool.query(
+      `SELECT 
+        COALESCE(SUM(or_.costo_total), 0) AS gasto_total,
+        COUNT(DISTINCT or_.mantenimiento_id) AS ots_con_repuestos,
+        COUNT(or_.id) AS items_usados,
+        COALESCE(SUM(or_.cantidad), 0) AS unidades_totales
+       FROM ot_repuestos or_
+       JOIN mantenimientos m ON m.id = or_.mantenimiento_id
+       WHERE ${filtroFecha('m.fecha_realizada', dias)} ${wInst}`,
+      params
+    );
+
+    // Top equipos con mayor gasto
+    const topEquipos = await pool.query(
+      `SELECT 
+        e.id, e.nombre, e.marca, e.modelo, e.servicio,
+        COALESCE(SUM(or_.costo_total), 0) AS gasto,
+        COUNT(or_.id) AS repuestos_usados
+       FROM ot_repuestos or_
+       JOIN mantenimientos m ON m.id = or_.mantenimiento_id
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE ${filtroFecha('m.fecha_realizada', dias)} ${wInst}
+       GROUP BY e.id, e.nombre, e.marca, e.modelo, e.servicio
+       ORDER BY gasto DESC
+       LIMIT 10`,
+      params
+    );
+
+    // Gasto por servicio
+    const porServicio = await pool.query(
+      `SELECT 
+        COALESCE(e.servicio, 'Sin servicio') AS servicio,
+        COALESCE(SUM(or_.costo_total), 0) AS gasto,
+        COUNT(DISTINCT m.id) AS ots
+       FROM ot_repuestos or_
+       JOIN mantenimientos m ON m.id = or_.mantenimiento_id
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE ${filtroFecha('m.fecha_realizada', dias)} ${wInst}
+       GROUP BY e.servicio
+       ORDER BY gasto DESC`,
+      params
+    );
+
+    // Gasto mensual
+    const tendencia = await pool.query(
+      `SELECT 
+        TO_CHAR(DATE_TRUNC('month', m.fecha_realizada), 'Mon YY') AS mes,
+        DATE_TRUNC('month', m.fecha_realizada) AS orden,
+        COALESCE(SUM(or_.costo_total), 0) AS gasto
+       FROM ot_repuestos or_
+       JOIN mantenimientos m ON m.id = or_.mantenimiento_id
+       WHERE ${filtroFecha('m.fecha_realizada', dias)} ${wInst}
+       GROUP BY DATE_TRUNC('month', m.fecha_realizada)
+       ORDER BY orden`,
+      params
+    );
+
+    res.json({
+      gastoTotal: parseFloat(gasto.rows[0].gasto_total),
+      otsConRepuestos: parseInt(gasto.rows[0].ots_con_repuestos),
+      itemsUsados: parseInt(gasto.rows[0].items_usados),
+      unidadesTotales: parseInt(gasto.rows[0].unidades_totales),
+      topEquipos: topEquipos.rows,
+      porServicio: porServicio.rows,
+      tendencia: tendencia.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 5. TECNOVIGILANCIA POR SERVICIO
+app.get('/indicadores/tecnovigilancia', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const dias = parseInt(req.query.dias) || 90;
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'AND t.institucion_id=$1' : '';
+
+    const general = await pool.query(
+      `SELECT 
+        COUNT(*) AS total,
+        SUM(CASE WHEN gravedad='LEVE' THEN 1 ELSE 0 END) AS leves,
+        SUM(CASE WHEN gravedad='MODERADO' THEN 1 ELSE 0 END) AS moderados,
+        SUM(CASE WHEN gravedad='GRAVE' THEN 1 ELSE 0 END) AS graves,
+        SUM(CASE WHEN estado='ABIERTO' THEN 1 ELSE 0 END) AS abiertos,
+        SUM(CASE WHEN estado='CERRADO' THEN 1 ELSE 0 END) AS cerrados
+       FROM tecnovigilancia t
+       WHERE ${filtroFecha('t.fecha_evento', dias)} ${wInst}`,
+      params
+    );
+
+    const porServicio = await pool.query(
+      `SELECT 
+        COALESCE(e.servicio, 'Sin servicio') AS servicio,
+        COUNT(*) AS total,
+        SUM(CASE WHEN t.gravedad='GRAVE' THEN 1 ELSE 0 END) AS graves
+       FROM tecnovigilancia t
+       LEFT JOIN equipos_biomedicos e ON e.id = t.equipo_id
+       WHERE ${filtroFecha('t.fecha_evento', dias)} ${wInst}
+       GROUP BY e.servicio
+       ORDER BY total DESC`,
+      params
+    );
+
+    const porTipo = await pool.query(
+      `SELECT 
+        tipo, COUNT(*) AS total
+       FROM tecnovigilancia t
+       WHERE ${filtroFecha('t.fecha_evento', dias)} ${wInst}
+       GROUP BY tipo
+       ORDER BY total DESC`,
+      params
+    );
+
+    const tendencia = await pool.query(
+      `SELECT 
+        TO_CHAR(DATE_TRUNC('month', t.fecha_evento), 'Mon YY') AS mes,
+        DATE_TRUNC('month', t.fecha_evento) AS orden,
+        COUNT(*) AS total
+       FROM tecnovigilancia t
+       WHERE ${filtroFecha('t.fecha_evento', dias)} ${wInst}
+       GROUP BY DATE_TRUNC('month', t.fecha_evento)
+       ORDER BY orden`,
+      params
+    );
+
+    const g = general.rows[0];
+    res.json({
+      total: parseInt(g.total),
+      leves: parseInt(g.leves),
+      moderados: parseInt(g.moderados),
+      graves: parseInt(g.graves),
+      abiertos: parseInt(g.abiertos),
+      cerrados: parseInt(g.cerrados),
+      porServicio: porServicio.rows,
+      porTipo: porTipo.rows,
+      tendencia: tendencia.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 6. CURVA DE ENVEJECIMIENTO (basada en fecha de creación del registro como proxy)
+app.get('/indicadores/envejecimiento', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'WHERE institucion_id=$1' : '';
+
+    // Distribución por antigüedad (años desde creación en sistema)
+    const distribucion = await pool.query(
+      `SELECT 
+        CASE 
+          WHEN EXTRACT(YEAR FROM AGE(NOW(), creado_en)) < 1 THEN '<1 año'
+          WHEN EXTRACT(YEAR FROM AGE(NOW(), creado_en)) < 3 THEN '1-3 años'
+          WHEN EXTRACT(YEAR FROM AGE(NOW(), creado_en)) < 5 THEN '3-5 años'
+          WHEN EXTRACT(YEAR FROM AGE(NOW(), creado_en)) < 10 THEN '5-10 años'
+          ELSE '>10 años'
+        END AS rango,
+        COUNT(*) AS total
+       FROM equipos_biomedicos ${wInst}
+       GROUP BY rango
+       ORDER BY 
+         CASE 
+           WHEN rango = '<1 año' THEN 1
+           WHEN rango = '1-3 años' THEN 2
+           WHEN rango = '3-5 años' THEN 3
+           WHEN rango = '5-10 años' THEN 4
+           ELSE 5
+         END`,
+      params
+    );
+
+    // Estado INVIMA
+    const invima = await pool.query(
+      `SELECT 
+        SUM(CASE WHEN fecha_vencimiento_invima IS NULL THEN 1 ELSE 0 END) AS sin_fecha,
+        SUM(CASE WHEN fecha_vencimiento_invima < NOW() THEN 1 ELSE 0 END) AS vencido,
+        SUM(CASE WHEN fecha_vencimiento_invima >= NOW() AND fecha_vencimiento_invima < NOW() + INTERVAL '30 days' THEN 1 ELSE 0 END) AS por_vencer,
+        SUM(CASE WHEN fecha_vencimiento_invima >= NOW() + INTERVAL '30 days' THEN 1 ELSE 0 END) AS vigente
+       FROM equipos_biomedicos ${wInst}`,
+      params
+    );
+
+    // Por servicio + edad promedio
+    const porServicio = await pool.query(
+      `SELECT 
+        COALESCE(servicio, 'Sin servicio') AS servicio,
+        COUNT(*) AS total,
+        ROUND(AVG(EXTRACT(EPOCH FROM AGE(NOW(), creado_en))/(365.25*86400))::numeric, 1) AS edad_promedio
+       FROM equipos_biomedicos ${wInst}
+       GROUP BY servicio
+       ORDER BY total DESC
+       LIMIT 10`,
+      params
+    );
+
+    res.json({
+      distribucion: distribucion.rows,
+      invima: invima.rows[0],
+      porServicio: porServicio.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// 7. ALERTAS PREDICTIVAS (equipos sin mantenimiento reciente)
+app.get('/indicadores/alertas-predictivas', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const params = instId ? [instId] : [];
+    const wInst = instId ? 'WHERE e.institucion_id=$1' : '';
+
+    // Equipos sin mantenimiento en >180 días
+    const sinMant = await pool.query(
+      `SELECT 
+        e.id, e.nombre, e.marca, e.modelo, e.serie, e.servicio, e.tipo_equipo,
+        COALESCE(MAX(m.fecha_realizada), e.creado_en) AS ultimo,
+        EXTRACT(DAY FROM AGE(NOW(), COALESCE(MAX(m.fecha_realizada), e.creado_en))) AS dias_sin_mant
+       FROM equipos_biomedicos e
+       LEFT JOIN mantenimientos m ON m.equipo_id = e.id AND m.estado='REALIZADO'
+       ${wInst}
+       GROUP BY e.id, e.nombre, e.marca, e.modelo, e.serie, e.servicio, e.tipo_equipo, e.creado_en
+       HAVING EXTRACT(DAY FROM AGE(NOW(), COALESCE(MAX(m.fecha_realizada), e.creado_en))) > 180
+       ORDER BY dias_sin_mant DESC
+       LIMIT 30`,
+      params
+    );
+
+    // OTs vencidas (programadas y no realizadas)
+    const otVencidas = await pool.query(
+      `SELECT 
+        m.id, m.tipo, m.fecha_programada, m.prioridad,
+        e.nombre AS equipo_nombre, e.servicio,
+        EXTRACT(DAY FROM AGE(NOW(), m.fecha_programada)) AS dias_atraso
+       FROM mantenimientos m
+       JOIN equipos_biomedicos e ON e.id = m.equipo_id
+       WHERE m.estado='PENDIENTE' AND m.fecha_programada < NOW()
+       ${instId ? 'AND m.institucion_id=$1' : ''}
+       ORDER BY m.fecha_programada ASC
+       LIMIT 30`,
+      params
+    );
+
+    // INVIMA vencidos o por vencer
+    const invimaCritico = await pool.query(
+      `SELECT 
+        e.id, e.nombre, e.marca, e.modelo, e.servicio, e.fecha_vencimiento_invima,
+        EXTRACT(DAY FROM AGE(e.fecha_vencimiento_invima, NOW())) AS dias_restantes
+       FROM equipos_biomedicos e
+       WHERE e.fecha_vencimiento_invima IS NOT NULL
+         AND e.fecha_vencimiento_invima < NOW() + INTERVAL '60 days'
+         ${instId ? 'AND e.institucion_id=$1' : ''}
+       ORDER BY e.fecha_vencimiento_invima ASC
+       LIMIT 30`,
+      params
+    );
+
+    res.json({
+      equiposSinMantenimiento: sinMant.rows,
+      otsVencidas: otVencidas.rows,
+      invimaCritico: invimaCritico.rows,
+    });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// EXPORTACIÓN — JSON consolidado de todos los indicadores
+app.get('/indicadores/consolidado', authMiddleware, async (req, res) => {
+  try {
+    const dias = parseInt(req.query.dias) || 90;
+    const baseUrl = `http://localhost:${PORT}`;
+    const headers = { Authorization: req.headers.authorization };
+    // Llamamos endpoints internos para consolidar — más simple es repetir queries:
+    // Para no duplicar todo, devolvemos los IDs de endpoints a llamar
+    res.json({
+      ok: true,
+      dias,
+      endpoints: ['cumplimiento','disponibilidad','productividad','costos','tecnovigilancia','envejecimiento','alertas-predictivas']
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+//////////////////////////////////////////////////
 // 📜 HISTORIAL
 //////////////////////////////////////////////////
 app.get('/historial/:equipo_id', authMiddleware, async (req, res) => {
@@ -757,9 +1220,8 @@ app.get('/reporte/equipos', authMiddleware, async (req, res) => {
     const equipos = await pool.query(`SELECT * FROM equipos_biomedicos ${instId?'WHERE institucion_id=$1':''} ORDER BY servicio,nombre`, instId?[instId]:[]);
     const usuario = await pool.query('SELECT nombre,rol FROM usuarios WHERE id=$1',[req.user?.id]);
     let instNombre = req.user?.institucion_nombre || 'Todas las instituciones';
-    const AZUL='#0a2342',VERDE='#00b87a',MUTED='#6b7a8d',NEGRO='#1a1a2e',BLANCO='#ffffff';
+    const AZUL='#0a2342',MUTED='#6b7a8d',NEGRO='#1a1a2e',BLANCO='#ffffff';
     const now=new Date();
-    const fmtFecha=(f)=>{ if(!f)return'—'; return new Date(f).toLocaleDateString('es-CO',{year:'numeric',month:'short',day:'2-digit'}); };
     const doc=new PDFDocument({margin:40,size:'A4',layout:'landscape'});
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition','attachment; filename=reporte_biomed.pdf');
