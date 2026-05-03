@@ -218,6 +218,29 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
     logo_url:institucion?.logo_url||'', codigo_reps:institucion?.codigo_reps||'', activa:institucion?.activa!==false,
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const subirImagen = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5*1024*1024) return alert('Imagen muy grande (máx 5MB)');
+    if (!file.type.startsWith('image/')) return alert('Solo se permiten imágenes');
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', 'biomed_logos');
+      const res = await fetch('https://api.cloudinary.com/v1_1/dn4ubmehe/image/upload', { method:'POST', body:fd });
+      const data = await res.json();
+      if (data.secure_url) setForm(f=>({...f, logo_url: data.secure_url}));
+      else alert('Error al subir: ' + (data.error?.message || 'desconocido'));
+    } catch(err) {
+      alert('Error de conexión: ' + err.message);
+    }
+    setUploading(false);
+  };
+
   const guardar = async () => {
     if (!form.nombre) return alert('Nombre obligatorio');
     setSaving(true);
@@ -228,21 +251,51 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
     if (data.error) return alert(data.error);
     onSaved(); onClose();
   };
+
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal">
       <div className="modal-header"><div className="modal-title">{esNueva?'Nueva institución':'Editar institución'}</div><button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button></div>
-      <div className="modal-body"><div className="form-grid">
-        <div className="field" style={{gridColumn:'1/3'}}><label>Nombre *</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} /></div>
-        <div className="field"><label>NIT</label><input value={form.nit} onChange={e=>setForm({...form,nit:e.target.value})} /></div>
-        <div className="field"><label>REPS</label><input value={form.codigo_reps} onChange={e=>setForm({...form,codigo_reps:e.target.value})} /></div>
-        <div className="field"><label>Ciudad</label><input value={form.ciudad} onChange={e=>setForm({...form,ciudad:e.target.value})} /></div>
-        <div className="field" style={{gridColumn:'1/3'}}><label>Dirección</label><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} /></div>
-        <div className="field"><label>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
-        <div className="field"><label>Email</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
-        <div className="field"><label>Logo URL</label><input value={form.logo_url} onChange={e=>setForm({...form,logo_url:e.target.value})} /></div>
-        {!esNueva&&<div className="field"><label>Estado</label><select value={form.activa?'true':'false'} onChange={e=>setForm({...form,activa:e.target.value==='true'})}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>}
-      </div></div>
-      <div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar} disabled={saving}>{saving?'Guardando...':(esNueva?'+ Crear':'✓ Guardar')}</button></div>
+      <div className="modal-body">
+
+        {/* SECCIÓN LOGO */}
+        <div style={{display:'flex',gap:16,alignItems:'center',marginBottom:20,padding:14,background:G.input,borderRadius:6,border:`1px solid ${G.inputBorder}`}}>
+          <div style={{width:80,height:80,borderRadius:8,background:G.bg,border:`1px solid ${G.cardBorder}`,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
+            {form.logo_url ? (
+              <img src={form.logo_url} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}} />
+            ) : (
+              <span style={{fontSize:32}}>🏥</span>
+            )}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,color:G.textMuted,letterSpacing:1,textTransform:'uppercase',fontWeight:600,marginBottom:6}}>Logo institucional</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <input id="logo-upload" type="file" accept="image/*" onChange={subirImagen} style={{display:'none'}} />
+              <label htmlFor="logo-upload" className="btn btn-primary" style={{cursor:'pointer',fontSize:11,padding:'6px 12px'}}>
+                {uploading?'⏳ Subiendo...':form.logo_url?'↑ Cambiar imagen':'↑ Subir imagen'}
+              </label>
+              {form.logo_url && (
+                <button className="btn btn-danger" style={{fontSize:11,padding:'6px 12px'}} onClick={()=>setForm({...form,logo_url:''})}>
+                  ✕ Quitar
+                </button>
+              )}
+            </div>
+            <div style={{fontSize:10,color:G.textMuted,marginTop:6}}>PNG, JPG, SVG · Máx 5MB</div>
+          </div>
+        </div>
+
+        {/* CAMPOS */}
+        <div className="form-grid">
+          <div className="field" style={{gridColumn:'1/3'}}><label>Nombre *</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} /></div>
+          <div className="field"><label>NIT</label><input value={form.nit} onChange={e=>setForm({...form,nit:e.target.value})} /></div>
+          <div className="field"><label>REPS</label><input value={form.codigo_reps} onChange={e=>setForm({...form,codigo_reps:e.target.value})} /></div>
+          <div className="field"><label>Ciudad</label><input value={form.ciudad} onChange={e=>setForm({...form,ciudad:e.target.value})} /></div>
+          <div className="field" style={{gridColumn:'1/3'}}><label>Dirección</label><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} /></div>
+          <div className="field"><label>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
+          <div className="field"><label>Email</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+          {!esNueva&&<div className="field"><label>Estado</label><select value={form.activa?'true':'false'} onChange={e=>setForm({...form,activa:e.target.value==='true'})}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>}
+        </div>
+      </div>
+      <div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar} disabled={saving||uploading}>{saving?'Guardando...':(esNueva?'+ Crear':'✓ Guardar')}</button></div>
     </div></div>
   );
 }
@@ -878,7 +931,12 @@ export default function App() {
 
             {seccion==='instituciones'&&esSuperAdmin&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(3,1fr)'}}>{[{label:'Total',valor:instituciones.length,cls:'blue'},{label:'Activas',valor:instituciones.filter(i=>i.activa).length,cls:'green'},{label:'Inactivas',valor:instituciones.filter(i=>!i.activa).length,cls:'red'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Instituciones</div><span className="badge badge-gray">{instituciones.length}</span></div>{instituciones.length===0?<div className="empty-state">Sin instituciones</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Tel</th><th>Email</th><th>REPS</th><th>Estado</th><th></th></tr></thead><tbody>{instituciones.map(inst=>(<tr key={inst.id}><td style={{fontWeight:500}}>🏥 {inst.nombre}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button><button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button></div></td></tr>))}</tbody></table>}</div>
+              <div className="panel"><div className="panel-header"><div className="panel-title">Instituciones</div><span className="badge badge-gray">{instituciones.length}</span></div>{instituciones.length===0?<div className="empty-state">Sin instituciones</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Tel</th><th>Email</th><th>REPS</th><th>Estado</th><th></th></tr></thead><tbody>{instituciones.map(inst=>(<tr key={inst.id}><td style={{fontWeight:500}}>
+  <div style={{display:'flex',alignItems:'center',gap:8}}>
+    {inst.logo_url ? <img src={inst.logo_url} alt="" style={{width:24,height:24,objectFit:'contain',borderRadius:4,background:G.bg}} /> : <span>🏥</span>}
+    {inst.nombre}
+  </div>
+</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button><button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button></div></td></tr>))}</tbody></table>}</div>
             </>)}
 
           </div>
