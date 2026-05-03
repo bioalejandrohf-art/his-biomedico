@@ -10,7 +10,6 @@ const pool = require('./db');
 const SECRET = process.env.SECRET || 'clave_super_segura';
 
 app.use(cors({ origin: '*' }));
-app.options('*', cors());
 app.use(express.json());
 
 app.get('/', (req, res) => res.send('Servidor funcionando 🚀'));
