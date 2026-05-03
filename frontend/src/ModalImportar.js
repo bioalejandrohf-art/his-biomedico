@@ -15,12 +15,15 @@ const MAPA_COLUMNAS = {
   marca: ['marca','fabricante','brand'],
   modelo: ['modelo','model','referencia','ref'],
   serie: ['serie','numero de serie','n° serie','serial','no serie','no. serie','número serie','nro serie'],
-  registro_invima: ['registro invima','invima','registro','reg invima','reg. invima','no invima','número invima'],
+  registro_invima: ['registro invima','invima','registro','reg invima','reg. invima','no invima','número invima','registro sanitario'],
   fecha_vencimiento_invima: ['vencimiento invima','vence invima','fecha vencimiento','vencimiento','venc invima','venc. invima','fecha venc'],
   clasificacion_riesgo: ['clasificacion riesgo','riesgo','clase','clasificacion','clase riesgo','clasificación'],
   ubicacion: ['ubicacion','ubicación','area','sala','consultorio','lugar'],
   servicio: ['servicio','area','departamento','seccion','sección','servicio clinico'],
   estado: ['estado','status','condicion','condición'],
+  activo_fijo: ['activo fijo','activo','codigo activo','codigo contable','af'],
+  garantia: ['garantia','garantía','garantia si/no','tiene garantia'],
+  garantia_vencimiento: ['vencimiento garantia','vence garantia','fecha garantia','venc garantia'],
 };
 
 const normalizar = (s) => (s||'').toString().trim().toLowerCase()
@@ -95,12 +98,12 @@ export default function ModalImportar({ token, equiposActuales, onClose, onSaved
   // PASO 1: Descargar plantilla
   const descargarPlantilla = () => {
     const data = [
-      ['Nombre','Marca','Modelo','Serie','Registro INVIMA','Vencimiento INVIMA','Clasificación Riesgo','Ubicación','Servicio','Estado'],
-      ['Monitor Signos Vitales','Mindray','VS-800','MND-001-2024','2020M-0012345-R1','2027-12-31','IIa','UCI Adultos','UCI','Activo'],
-      ['Desfibrilador','Philips','HeartStart','PHL-456','2019M-9876543','2026-06-15','III','Urgencias','Urgencias','Activo'],
+      ['Activo Fijo','Nombre','Marca','Modelo','Serie','Registro INVIMA','Vencimiento INVIMA','Clasificación Riesgo','Ubicación','Servicio','Garantía','Venc. Garantía','Estado'],
+      ['AF-001','Monitor Signos Vitales','Mindray','VS-800','MND-001-2024','2020M-0012345-R1','2027-12-31','IIa','UCI Adultos','UCI','SI','2026-08-15','Activo'],
+      ['AF-002','Desfibrilador','Philips','HeartStart','PHL-456','2019M-9876543','2026-06-15','III','Urgencias','Urgencias','NO','','Activo'],
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{wch:25},{wch:15},{wch:15},{wch:18},{wch:20},{wch:14},{wch:12},{wch:18},{wch:15},{wch:12}];
+    ws['!cols'] = [{wch:10},{wch:25},{wch:15},{wch:15},{wch:18},{wch:20},{wch:14},{wch:12},{wch:18},{wch:15},{wch:10},{wch:14},{wch:12}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Equipos');
     XLSX.writeFile(wb, 'plantilla_equipos_biomed.xlsx');
@@ -152,9 +155,13 @@ export default function ModalImportar({ token, equiposActuales, onClose, onSaved
       const obj = { _row: idx + 2 }; // fila Excel real
       Object.entries(mapeo).forEach(([colIdx, campo]) => {
         let val = row[colIdx];
-        if (campo === 'fecha_vencimiento_invima') val = parsearFecha(val);
+        if (campo === 'fecha_vencimiento_invima' || campo === 'garantia_vencimiento') val = parsearFecha(val);
         else if (campo === 'clasificacion_riesgo') val = normalizarRiesgo(val);
         else if (campo === 'estado') val = normalizarEstado(val);
+        else if (campo === 'garantia') {
+          const v = (val||'').toString().trim().toLowerCase();
+          val = ['si','sí','yes','true','1','verdadero'].includes(v);
+        }
         else val = (val||'').toString().trim();
         obj[campo] = val;
       });
@@ -220,11 +227,12 @@ export default function ModalImportar({ token, equiposActuales, onClose, onSaved
 
   const cerrarYRefrescar = () => { onSaved(); onClose(); };
 
-  const camposDisponibles = ['nombre','marca','modelo','serie','registro_invima','fecha_vencimiento_invima','clasificacion_riesgo','ubicacion','servicio','estado'];
+  const camposDisponibles = ['nombre','marca','modelo','serie','registro_invima','fecha_vencimiento_invima','clasificacion_riesgo','ubicacion','servicio','estado','activo_fijo','garantia','garantia_vencimiento'];
   const labelCampo = {
     nombre:'Nombre *', marca:'Marca', modelo:'Modelo', serie:'Serie',
     registro_invima:'Reg. INVIMA', fecha_vencimiento_invima:'Venc. INVIMA',
-    clasificacion_riesgo:'Riesgo', ubicacion:'Ubicación', servicio:'Servicio', estado:'Estado'
+    clasificacion_riesgo:'Riesgo', ubicacion:'Ubicación', servicio:'Servicio', estado:'Estado',
+    activo_fijo:'Activo Fijo', garantia:'Garantía (SI/NO)', garantia_vencimiento:'Venc. Garantía'
   };
 
   return (

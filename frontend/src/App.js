@@ -218,6 +218,9 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
     nombre:institucion?.nombre||'', nit:institucion?.nit||'', direccion:institucion?.direccion||'',
     ciudad:institucion?.ciudad||'', telefono:institucion?.telefono||'', email:institucion?.email||'',
     logo_url:institucion?.logo_url||'', codigo_reps:institucion?.codigo_reps||'', activa:institucion?.activa!==false,
+    doc_inventario_codigo:institucion?.doc_inventario_codigo||'GTE-FR-001',
+    doc_inventario_version:institucion?.doc_inventario_version||'2',
+    doc_inventario_vigencia:institucion?.doc_inventario_vigencia?.slice(0,10)||'2026-12-31',
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -280,6 +283,16 @@ function ModalInstitucion({ institucion, token, onClose, onSaved }) {
           <div className="field"><label>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
           <div className="field"><label>Email</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           {!esNueva&&<div className="field"><label>Estado</label><select value={form.activa?'true':'false'} onChange={e=>setForm({...form,activa:e.target.value==='true'})}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>}
+        </div>
+
+        <div style={{marginTop:18,padding:14,background:G.input,borderRadius:6,border:`1px solid ${G.inputBorder}`}}>
+          <div style={{fontSize:11,color:G.textMuted,letterSpacing:1,textTransform:'uppercase',fontWeight:600,marginBottom:10}}>📋 Configuración del documento de inventario</div>
+          <div className="form-grid">
+            <div className="field"><label>Código documento</label><input value={form.doc_inventario_codigo} onChange={e=>setForm({...form,doc_inventario_codigo:e.target.value})} placeholder="GTE-FR-001" /></div>
+            <div className="field"><label>Versión</label><input value={form.doc_inventario_version} onChange={e=>setForm({...form,doc_inventario_version:e.target.value})} placeholder="2" /></div>
+            <div className="field"><label>Vigencia</label><input type="date" value={form.doc_inventario_vigencia} onChange={e=>setForm({...form,doc_inventario_vigencia:e.target.value})} /></div>
+          </div>
+          <div style={{fontSize:10,color:G.textMuted,fontStyle:'italic'}}>Estos valores aparecerán en el encabezado de la plantilla de inventario al exportar a PDF/Excel</div>
         </div>
       </div>
       <div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar} disabled={saving||uploading}>{saving?'Guardando...':(esNueva?'+ Crear':'✓ Guardar')}</button></div>
@@ -777,7 +790,7 @@ export default function App() {
   const rol = user?.rol;
   const esSuperAdmin = rol === 'SuperAdmin';
 
-  const formVacio = { nombre:'',marca:'',modelo:'',serie:'',registro_invima:'',fecha_vencimiento_invima:'',clasificacion_riesgo:'',ubicacion:'',servicio:'',estado:'',tipo_equipo:'' };
+  const formVacio = { nombre:'',marca:'',modelo:'',serie:'',registro_invima:'',fecha_vencimiento_invima:'',clasificacion_riesgo:'',ubicacion:'',servicio:'',estado:'',tipo_equipo:'',activo_fijo:'',garantia:false,garantia_vencimiento:'' };
   const [form, setForm] = useState(formVacio);
   const headers = { Authorization: token };
 
@@ -809,7 +822,7 @@ export default function App() {
   };
   const editar = (eq) => {
     setEditando(eq.id);
-    setForm({ nombre:eq.nombre||'',marca:eq.marca||'',modelo:eq.modelo||'',serie:eq.serie||'',registro_invima:eq.registro_invima||'',fecha_vencimiento_invima:eq.fecha_vencimiento_invima?.slice(0,10)||'',clasificacion_riesgo:eq.clasificacion_riesgo||'',ubicacion:eq.ubicacion||'',servicio:eq.servicio||'',estado:eq.estado||'',tipo_equipo:eq.tipo_equipo||'' });
+    setForm({ nombre:eq.nombre||'',marca:eq.marca||'',modelo:eq.modelo||'',serie:eq.serie||'',registro_invima:eq.registro_invima||'',fecha_vencimiento_invima:eq.fecha_vencimiento_invima?.slice(0,10)||'',clasificacion_riesgo:eq.clasificacion_riesgo||'',ubicacion:eq.ubicacion||'',servicio:eq.servicio||'',estado:eq.estado||'',tipo_equipo:eq.tipo_equipo||'',activo_fijo:eq.activo_fijo||'',garantia:!!eq.garantia,garantia_vencimiento:eq.garantia_vencimiento?.slice(0,10)||'' });
     setSeccion('inventario');
   };
   const eliminar = (id) => { if(!window.confirm('¿Confirmar?'))return; fetch(`${API}/equipos/${id}`,{method:'DELETE',headers}).then(()=>cargarTodo()); };
@@ -832,6 +845,157 @@ export default function App() {
       const a = document.createElement('a'); a.href=url; a.download='reporte_biomed.pdf'; a.click();
       window.URL.revokeObjectURL(url);
     } catch(e) { console.error(e); }
+  };
+
+  const exportarPlantillaInventario = async (formato) => {
+    // Obtener info de la institución
+    let inst = null;
+    if (user?.institucion_id) {
+      try {
+        const r = await fetch(`${API}/instituciones/mia`,{headers});
+        inst = await r.json();
+      } catch(e) {}
+    }
+    const instNombre = inst?.nombre || user?.institucion_nombre || 'TODAS LAS INSTITUCIONES';
+    const codigo = inst?.doc_inventario_codigo || 'GTE-FR-001';
+    const version = inst?.doc_inventario_version || '2';
+    const vigencia = inst?.doc_inventario_vigencia ? new Date(inst.doc_inventario_vigencia).toLocaleDateString('es-CO') : '2026-12-31';
+    const logo = inst?.logo_url || '';
+    const anio = new Date().getFullYear();
+
+    const equiposExport = filtrados.length > 0 ? filtrados : equipos;
+
+    if (formato === 'excel') {
+      // EXPORTAR A EXCEL CON FORMATO IDÉNTICO
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+
+      const headers = [
+        ['', '', '', instNombre, '', '', '', '', '', 'VERSION:', version],
+        ['', '', '', '', '', '', '', '', '', 'VIGENCIA:', vigencia],
+        ['', '', '', `INVENTARIO DE EQUIPOS BIOMEDICOS ${anio}`, '', '', '', '', '', 'CÓDIGO:', codigo],
+        ['', '', '', '', '', '', '', '', '', 'PÁGINA:', '1 de 1'],
+        [],
+        [],
+        ['ITEM','ACTIVO FIJO','EQUIPO','MARCA','MODELO','SERIE','SERVICIO','UBICACIÓN','REGISTRO SANITARIO','RIESGO','GARANTÍA (SI/NO)','ESTADO']
+      ];
+
+      const filas = equiposExport.map((eq, i) => [
+        i + 1,
+        eq.activo_fijo || '',
+        eq.nombre || '',
+        eq.marca || '',
+        eq.modelo || '',
+        eq.serie || '',
+        eq.servicio || '',
+        eq.ubicacion || '',
+        eq.registro_invima || '',
+        eq.clasificacion_riesgo || '',
+        eq.garantia ? 'SI' : 'NO',
+        eq.estado || ''
+      ]);
+
+      const data = [...headers, ...filas];
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [
+        {wch:6},{wch:11},{wch:32},{wch:18},{wch:22},{wch:21},{wch:20},{wch:23},{wch:24},{wch:8},{wch:14},{wch:12}
+      ];
+      // Merges del encabezado
+      ws['!merges'] = [
+        {s:{r:0,c:3},e:{r:1,c:8}},  // Nombre institución
+        {s:{r:2,c:3},e:{r:3,c:8}},  // Título inventario
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'INVENTARIO');
+      XLSX.writeFile(wb, `Inventario_${codigo}_${instNombre.replace(/\s+/g,'_')}.xlsx`);
+      return;
+    }
+
+    // EXPORTAR A PDF (ventana imprimible con réplica exacta)
+    const w = window.open('', '_blank');
+    if (!w) return alert('Permite ventanas emergentes para generar el PDF');
+    const fechaHoy = new Date().toLocaleDateString('es-CO');
+    const logoHtml = logo ? `<img src="${logo}" style="width:90px;height:90px;object-fit:contain"/>` : '<div style="font-size:50px">🏥</div>';
+
+    const filas = equiposExport.map((eq, i) => `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${eq.activo_fijo || ''}</td>
+        <td>${eq.nombre || ''}</td>
+        <td>${eq.marca || ''}</td>
+        <td>${eq.modelo || ''}</td>
+        <td>${eq.serie || ''}</td>
+        <td>${eq.servicio || ''}</td>
+        <td>${eq.ubicacion || ''}</td>
+        <td>${eq.registro_invima || ''}</td>
+        <td style="text-align:center">${eq.clasificacion_riesgo || ''}</td>
+        <td style="text-align:center">${eq.garantia ? 'SI' : 'NO'}</td>
+        <td style="text-align:center">${eq.estado || ''}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Inventario ${codigo}</title>
+    <style>
+      @page { size: A4 landscape; margin: 8mm; }
+      body { font-family: Arial,sans-serif; font-size:9px; color:#000; margin:0; padding:0; }
+      table.encabezado { border-collapse: collapse; width:100%; margin-bottom:8px; }
+      table.encabezado td { border: 2px solid #000; padding: 6px; vertical-align:middle; }
+      table.encabezado .logo-cell { width:100px; text-align:center; background:#fff; }
+      table.encabezado .titulo-inst { font-weight:bold; text-align:center; font-size:13px; background:#e6f0fa; }
+      table.encabezado .titulo-doc { font-weight:bold; text-align:center; font-size:14px; background:#0a2342; color:#fff; }
+      table.encabezado .meta { font-size:9px; width:160px; }
+      table.encabezado .meta b { color:#0a2342; }
+
+      table.inventario { border-collapse: collapse; width:100%; }
+      table.inventario th, table.inventario td { border: 1px solid #555; padding: 4px 5px; vertical-align:middle; font-size:8.5px; }
+      table.inventario th { background:#0a2342; color:#fff; font-weight:bold; text-align:center; font-size:9px; padding:6px 4px; }
+      table.inventario tbody tr:nth-child(even) { background:#f7fafc; }
+      table.inventario tbody tr:hover { background:#e6f0fa; }
+      .footer { font-size:8px; color:#666; text-align:center; margin-top:6px; }
+    </style></head><body>
+
+    <table class="encabezado">
+      <tr>
+        <td class="logo-cell" rowspan="2">${logoHtml}</td>
+        <td class="titulo-inst" colspan="2">${instNombre}</td>
+        <td class="meta"><b>VERSION:</b> ${version}</td>
+        <td class="meta"><b>VIGENCIA:</b> ${vigencia}</td>
+      </tr>
+      <tr>
+        <td class="titulo-doc" colspan="2">INVENTARIO DE EQUIPOS BIOMEDICOS ${anio}</td>
+        <td class="meta"><b>CÓDIGO:</b> ${codigo}</td>
+        <td class="meta"><b>PÁGINA:</b> 1 de 1</td>
+      </tr>
+    </table>
+
+    <table class="inventario">
+      <thead>
+        <tr>
+          <th style="width:30px">ITEM</th>
+          <th style="width:70px">ACTIVO FIJO</th>
+          <th style="width:160px">EQUIPO</th>
+          <th style="width:90px">MARCA</th>
+          <th style="width:110px">MODELO</th>
+          <th style="width:100px">SERIE</th>
+          <th style="width:100px">SERVICIO</th>
+          <th style="width:115px">UBICACIÓN</th>
+          <th style="width:120px">REGISTRO SANITARIO</th>
+          <th style="width:50px">RIESGO</th>
+          <th style="width:60px">GARANTÍA (SI/NO)</th>
+          <th style="width:65px">ESTADO</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filas || '<tr><td colspan="12" style="text-align:center;font-style:italic;padding:20px">Sin equipos registrados</td></tr>'}
+      </tbody>
+    </table>
+
+    <div class="footer">Generado: ${fechaHoy} · Total equipos: ${equiposExport.length} · ${instNombre}</div>
+
+    <script>window.onload = () => setTimeout(() => window.print(), 600);</script>
+    </body></html>`;
+
+    w.document.write(html);
+    w.document.close();
   };
 
   const total = equipos.length;
@@ -981,13 +1145,73 @@ export default function App() {
                       </div>
                       <div className="field"><label>Riesgo</label><select value={form.clasificacion_riesgo} onChange={e=>setForm({...form,clasificacion_riesgo:e.target.value})}><option value="">Seleccionar</option>{['I','IIa','IIb','III'].map(c=><option key={c} value={c}>Clase {c}</option>)}</select></div>
                       <div className="field"><label>Estado</label><select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option value="">Seleccionar</option><option value="Activo">Activo</option><option value="Mantenimiento">En mantenimiento</option><option value="Baja">Dado de baja</option></select></div>
+                      <div className="field"><label>Activo Fijo</label><input value={form.activo_fijo} onChange={e=>setForm({...form,activo_fijo:e.target.value})} placeholder="Código contable" /></div>
+                      <div className="field"><label>Garantía</label><select value={form.garantia?'SI':'NO'} onChange={e=>setForm({...form,garantia:e.target.value==='SI'})}><option value="NO">NO</option><option value="SI">SÍ</option></select></div>
+                      {form.garantia && <div className="field"><label>Vencimiento garantía</label><input type="date" value={form.garantia_vencimiento} onChange={e=>setForm({...form,garantia_vencimiento:e.target.value})} /></div>}
                     </div>
                     <button className="btn btn-primary" onClick={guardar}>{editando?'✓ Guardar':'+ Registrar'}</button>
                   </div>
                 </div>
               )}
               <div className="search-bar"><span>⌕</span><input placeholder="Buscar..." value={filtro} onChange={e=>setFiltro(e.target.value)} /></div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>{filtrados.length===0?<div className="empty-state">Sin equipos</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Marca/Modelo</th><th>Serie</th><th>INVIMA</th><th>Vencimiento</th><th>Riesgo</th><th>Servicio</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{filtrados.map(eq=>{const inv=getEstadoInvima(eq.fecha_vencimiento_invima);const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';return <tr key={eq.id}><td style={{fontWeight:500}}>{eq.nombre}</td><td>{eq.tipo_equipo?<span className="badge badge-purple">{eq.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td><td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td><td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td><td style={{color:G.textMuted}}>{eq.servicio||'—'}</td><td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>{rol!=='Auditor'&&<><button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button><button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button></>}</div></td></tr>;})}</tbody></table>}</div>
+              <div className="panel"><div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>{filtrados.length===0 ? <div className="empty-state">Sin equipos</div> : (
+  <table className="data-table">
+    <thead><tr>
+      <th>A. Fijo</th>
+      <th>Nombre</th>
+      <th>Tipo</th>
+      <th>Marca/Modelo</th>
+      <th>Serie</th>
+      <th>INVIMA</th>
+      <th>Vencimiento</th>
+      <th>Riesgo</th>
+      <th>Servicio</th>
+      <th>Garantía</th>
+      <th>Estado</th>
+      {esSuperAdmin&&<th>Institución</th>}
+      <th></th>
+    </tr></thead>
+    <tbody>
+      {filtrados.map(eq=>{
+        const inv=getEstadoInvima(eq.fecha_vencimiento_invima);
+        const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';
+        const garVencida = eq.garantia && eq.garantia_vencimiento && new Date(eq.garantia_vencimiento) < new Date();
+        return (
+          <tr key={eq.id}>
+            <td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{eq.activo_fijo||'—'}</td>
+            <td style={{fontWeight:500}}>{eq.nombre}</td>
+            <td>{eq.tipo_equipo?<span className="badge badge-purple">{eq.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td>
+            <td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td>
+            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td>
+            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td>
+            <td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td>
+            <td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td>
+            <td style={{color:G.textMuted}}>{eq.servicio||'—'}</td>
+            <td>
+              {eq.garantia ? (
+                <div>
+                  <span className={`badge ${garVencida?'badge-red':'badge-green'}`}>{garVencida?'VENCIDA':'SÍ'}</span>
+                  {eq.garantia_vencimiento && <div style={{fontSize:10,color:G.textMuted,marginTop:2,fontFamily:'IBM Plex Mono'}}>{formatFecha(eq.garantia_vencimiento)}</div>}
+                </div>
+              ) : <span className="badge badge-gray">NO</span>}
+            </td>
+            <td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>
+            {esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}
+            <td>
+              <div style={{display:'flex',gap:4}}>
+                <button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>
+                {rol!=='Auditor'&&<>
+                  <button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button>
+                  <button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button>
+                </>}
+              </div>
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+)}</div>
             </>)}
 
             {seccion==='mantenimiento' && (<>
