@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ModalImportar from './ModalImportar';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -613,6 +614,7 @@ export default function App() {
   const [modalRep, setModalRep] = useState(null);
   const [modalMov, setModalMov] = useState(null);
   const [modalDetRep, setModalDetRep] = useState(null);
+  const [modalImportar, setModalImportar] = useState(false);
 
   const user = token ? parseJwt(token) : null;
   const rol = user?.rol;
@@ -717,7 +719,7 @@ export default function App() {
       {modalRep!==null && <ModalRepuesto repuesto={modalRep||null} equipos={equipos} token={token} onClose={()=>setModalRep(null)} onSaved={()=>{cargarTodo();setModalRep(null);}} />}
       {modalMov && <ModalMovimiento repuesto={modalMov} token={token} onClose={()=>setModalMov(null)} onSaved={cargarTodo} />}
       {modalDetRep && <ModalDetalleRepuesto repuesto={modalDetRep} token={token} onClose={()=>setModalDetRep(null)} />}
-
+      {modalImportar && <ModalImportar token={token} equiposActuales={equipos} onClose={()=>setModalImportar(false)} onSaved={cargarTodo} />}
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-logo">
@@ -753,7 +755,9 @@ export default function App() {
             <div className="topbar-right">
               <button className="btn btn-ghost" onClick={descargarPDF}>↓ PDF</button>
               {rol!=='Auditor'&&seccion==='mantenimiento'&&<button className="btn btn-primary" onClick={()=>setModalOT(true)}>+ Nueva OT</button>}
+              {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-purple" onClick={()=>setModalImportar(true)}>📊 Importar Excel</button>}
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-primary" onClick={()=>{setEditando(null);setForm(formVacio);}}>+ Nuevo equipo</button>}
+
               {rol!=='Auditor'&&seccion==='tecnovigilancia'&&<button className="btn btn-primary" onClick={()=>setModalTecno(true)}>+ Nuevo reporte</button>}
               {rol!=='Auditor'&&seccion==='repuestos'&&<button className="btn btn-primary" onClick={()=>setModalRep(false)}>+ Nuevo repuesto</button>}
               {['Admin','SuperAdmin'].includes(rol)&&seccion==='usuarios'&&<button className="btn btn-primary" onClick={()=>setModalUsuario(false)}>+ Nuevo usuario</button>}
