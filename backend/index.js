@@ -555,7 +555,11 @@ app.get('/reporte/equipos', authMiddleware, async (req, res) => {
   }
 });
 
+
 //////////////////////////////////////////////////
 // 🚀 SERVER
 //////////////////////////////////////////////////
+app.get('/', (req, res) => {
+  res.send('Servidor funcionando 🚀');
+});
 app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
