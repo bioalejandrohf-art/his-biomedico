@@ -1,3 +1,5 @@
+import ModalImportar from './ModalImportar';
+import ModalReporte from './ModalReporte';
 import { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -769,6 +771,7 @@ export default function App() {
   const [modalDetRep, setModalDetRep] = useState(null);
   const [modalImportar, setModalImportar] = useState(false);
   const [modalProtocolo, setModalProtocolo] = useState(null);
+  const [modalReporte, setModalReporte] = useState(null);
 
   const user = token ? parseJwt(token) : null;
   const rol = user?.rol;
@@ -882,6 +885,7 @@ export default function App() {
       {modalDetRep && <ModalDetalleRepuesto repuesto={modalDetRep} token={token} onClose={()=>setModalDetRep(null)} />}
       {modalImportar && <ModalImportar token={token} equiposActuales={equipos} onClose={()=>setModalImportar(false)} onSaved={cargarTodo} />}
       {modalProtocolo!==null && <ModalProtocolo protocolo={modalProtocolo||null} tiposEquipo={tiposEquipo} token={token} onClose={()=>setModalProtocolo(null)} onSaved={()=>{cargarTodo();setModalProtocolo(null);}} />}
+      {modalReporte && <ModalReporte ot={modalReporte} token={token} onClose={()=>setModalReporte(null)} onSaved={cargarTodo} />}
 
       <div className="layout">
         <aside className="sidebar">
@@ -988,8 +992,12 @@ export default function App() {
               <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:16,marginBottom:24}}>{[{label:'Total',valor:kpis?.total??'—',cls:'blue'},{label:'Pendientes',valor:kpis?.pendientes??'—',cls:'orange'},{label:'Realizados',valor:kpis?.realizados??'—',cls:'green'},{label:'Críticas',valor:kpis?.criticas??'—',cls:'red'},{label:'MTTR días',valor:kpis?.mttr??'—',cls:'purple'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
               {alertas.length>0&&<div className="alert-bar"><span className="alert-icon">⚠</span><div><div className="alert-title">OTs ≤7 días</div>{alertas.map(a=><div key={a.id} className="alert-item">{a.equipo_nombre} · {formatFecha(a.fecha_programada)}</div>)}</div></div>}
               <div style={{display:'flex',gap:8,marginBottom:16}}>{['TODOS','PENDIENTE','REALIZADO'].map(f=><button key={f} className={`btn ${filtroMant===f?'btn-primary':'btn-ghost'}`} style={{fontSize:11}} onClick={()=>setFiltroMant(f)}>{f}</button>)}</div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Órdenes</div><span className="badge badge-gray">{mantFiltrados.length}</span></div>{mantFiltrados.length===0?<div className="empty-state">Sin órdenes</div>:<table className="data-table"><thead><tr><th>Equipo</th><th>Tipo Equipo</th><th>Servicio</th><th>Tipo</th><th>Prioridad</th><th>Programado</th><th>Realizado</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{mantFiltrados.map(m=>(<tr key={m.id}><td style={{fontWeight:500}}>{m.equipo_nombre}</td><td>{m.tipo_equipo?<span className="badge badge-purple">{m.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted,fontSize:11}}>{m.equipo_servicio||'—'}</td><td><span className="badge badge-gray">{m.tipo}</span></td><td><span className={`badge ${prioridadBadge(m.prioridad)}`}>{m.prioridad}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(m.fecha_programada)}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{m.fecha_realizada?formatFecha(m.fecha_realizada):'—'}</td><td><span className={`badge ${m.estado==='PENDIENTE'?'badge-orange':'badge-green'}`}>{m.estado}</span></td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{m.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td>{m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)}>✓</button>}</td>}</tr>))}</tbody></table>}</div>
-            </>)}
+              <div className="panel"><div className="panel-header"><div className="panel-title">Órdenes</div><span className="badge badge-gray">{mantFiltrados.length}</span></div>{mantFiltrados.length===0?<div className="empty-state">Sin órdenes</div>:<table className="data-table"><thead><tr><th>Equipo</th><th>Tipo Equipo</th><th>Servicio</th><th>Tipo</th><th>Prioridad</th><th>Programado</th><th>Realizado</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{mantFiltrados.map(m=>(<tr key={m.id}><td style={{fontWeight:500}}>{m.equipo_nombre}</td><td>{m.tipo_equipo?<span className="badge badge-purple">{m.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted,fontSize:11}}>{m.equipo_servicio||'—'}</td><td><span className="badge badge-gray">{m.tipo}</span></td><td><span className={`badge ${prioridadBadge(m.prioridad)}`}>{m.prioridad}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(m.fecha_programada)}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{m.fecha_realizada?formatFecha(m.fecha_realizada):'—'}</td><td><span className={`badge ${m.estado==='PENDIENTE'?'badge-orange':'badge-green'}`}>{m.estado}</span></td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{m.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td><div style={{display:'flex',gap:4}}>
+              <button className="btn btn-purple btn-icon" onClick={()=>setModalReporte(m)} title="Reporte completo de mantenimiento">📋</button>
+              {m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)} title="Finalizar OT">✓</button>}
+              {m.reporte_id&&<span className="badge badge-green" style={{marginLeft:4}} title="Tiene reporte">✓R</span>}
+              </div></td>}</tr>))}</tbody></table>}</div>
+              </>)}
 
             {seccion==='tecnovigilancia' && (<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>{[{label:'Total',valor:tecno.length,cls:'blue'},{label:'Abiertos',valor:tecno.filter(t=>t.estado==='ABIERTO').length,cls:'red'},{label:'En revisión',valor:tecno.filter(t=>t.estado==='EN_REVISION').length,cls:'orange'},{label:'Cerrados',valor:tecno.filter(t=>t.estado==='CERRADO').length,cls:'green'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
