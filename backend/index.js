@@ -9,15 +9,8 @@ const PORT = process.env.PORT || 4000;
 const pool = require('./db');
 const SECRET = process.env.SECRET || 'clave_super_segura';
 
-app.use(cors({
-  origin: [
-    'https://his-biomedico.vercel.app',
-    'https://his-biomedico-f8sqqbuxc-ales-projects-6bd3e884.vercel.app',
-    /\.vercel\.app$/,
-    'http://localhost:3000'
-  ],
-  credentials: true
-}));
+app.use(cors({ origin: '*' }));
+app.options('*', cors());
 app.use(express.json());
 
 app.get('/', (req, res) => res.send('Servidor funcionando 🚀'));
@@ -48,9 +41,8 @@ const soloSuperAdmin = (req, res, next) => {
   next();
 };
 
-// Middleware para filtrar por institución
 const filtroInstitucion = (req) => {
-  if (req.user?.rol === 'SuperAdmin') return null; // ve todo
+  if (req.user?.rol === 'SuperAdmin') return null;
   return req.user?.institucion_id || null;
 };
 
@@ -120,7 +112,6 @@ app.delete('/instituciones/:id', authMiddleware, soloSuperAdmin, async (req, res
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Super Admin cambia de institución activa
 app.post('/instituciones/seleccionar/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   const inst = await pool.query('SELECT * FROM instituciones WHERE id=$1', [req.params.id]);
   if (!inst.rows.length) return res.status(404).json({ error: 'Institución no encontrada' });
@@ -157,7 +148,6 @@ app.post('/login', async (req, res) => {
   if (!valid) return res.status(400).json({ error: 'Contraseña incorrecta' });
   const u = user.rows[0];
 
-  // Si es SuperAdmin sin institución seleccionada, token sin institucion_id
   const token = jwt.sign(
     { id: u.id, rol: u.rol, nombre: u.nombre,
       institucion_id: u.institucion_id || null,
@@ -165,7 +155,6 @@ app.post('/login', async (req, res) => {
     SECRET
   );
 
-  // Si tiene institución, cargar su nombre
   if (u.institucion_id) {
     const inst = await pool.query('SELECT nombre FROM instituciones WHERE id=$1', [u.institucion_id]);
     const tokenConInst = jwt.sign(
@@ -398,9 +387,8 @@ app.put('/tecnovigilancia/:id', authMiddleware, async (req, res) => {
 app.get('/dashboard/kpis', authMiddleware, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
-    const w  = instId ? 'WHERE institucion_id=$1' : '';
-    const wa = instId ? 'WHERE e.institucion_id=$1' : '';
-    const p  = instId ? [instId] : [];
+    const w = instId ? 'WHERE institucion_id=$1' : '';
+    const p = instId ? [instId] : [];
 
     const totalEquipos  = await pool.query(`SELECT COUNT(*) FROM equipos_biomedicos ${w}`, p);
     const activos       = await pool.query(`SELECT COUNT(*) FROM equipos_biomedicos WHERE estado='Activo'${instId?' AND institucion_id=$1':''}`, p);
@@ -486,14 +474,15 @@ app.get('/reporte/equipos', authMiddleware, async (req, res) => {
     const now=new Date();
     const fmtFecha=(f)=>{ if(!f)return'—'; return new Date(f).toLocaleDateString('es-CO',{year:'numeric',month:'short',day:'2-digit'}); };
     const estadoInvima=(fecha)=>{ if(!fecha)return{label:'SIN FECHA',color:MUTED}; const diff=(new Date(fecha)-now)/(1000*60*60*24); if(diff<0)return{label:'VENCIDO',color:'#e63946'}; if(diff<=30)return{label:'POR VENCER',color:'#f4a261'}; return{label:'VIGENTE',color:VERDE}; };
-    const calcRowHeight=(celdas,colWidths)=>{ let maxH=MIN_H; celdas.forEach((val,i)=>{ doc.font('Helvetica').fontSize(FONT_SIZE); const h=doc.heightOfString(val||'—',{width:colWidths[i]-PADDING*2}); if(h+PADDING*2>maxH)maxH=h+PADDING*2; }); return maxH; };
-    const drawRow=(celdas,colWidths,colors,bolds,xStart,yStart,rowH,rowBg)=>{ const anchoUtil=842-80; doc.rect(xStart,yStart,anchoUtil,rowH).fill(rowBg); let cx=xStart; celdas.forEach((val,i)=>{ doc.fillColor(colors[i]).font(bolds[i]?'Helvetica-Bold':'Helvetica').fontSize(FONT_SIZE).text(val||'—',cx+PADDING,yStart+PADDING,{width:colWidths[i]-PADDING*2,lineBreak:true}); cx+=colWidths[i]; }); doc.rect(xStart,yStart+rowH-0.5,anchoUtil,0.5).fill('#dde3ec'); };
-    const drawHeader=(labels,widths,xStart,yStart)=>{ const anchoUtil=842-80; doc.rect(xStart,yStart,anchoUtil,MIN_H).fill(AZUL); let cx=xStart; labels.forEach((lbl,i)=>{ doc.fillColor(BLANCO).font('Helvetica-Bold').fontSize(FONT_SIZE).text(lbl,cx+PADDING,yStart+5,{width:widths[i]-PADDING*2,lineBreak:false}); cx+=widths[i]; }); return yStart+MIN_H; };
 
     const doc=new PDFDocument({margin:40,size:'A4',layout:'landscape'});
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition','attachment; filename=reporte_biomed.pdf');
     doc.pipe(res);
+
+    const calcRowHeight=(celdas,colWidths)=>{ let maxH=MIN_H; celdas.forEach((val,i)=>{ doc.font('Helvetica').fontSize(FONT_SIZE); const h=doc.heightOfString(val||'—',{width:colWidths[i]-PADDING*2}); if(h+PADDING*2>maxH)maxH=h+PADDING*2; }); return maxH; };
+    const drawRow=(celdas,colWidths,colors,bolds,xStart,yStart,rowH,rowBg)=>{ const anchoUtil=842-80; doc.rect(xStart,yStart,anchoUtil,rowH).fill(rowBg); let cx=xStart; celdas.forEach((val,i)=>{ doc.fillColor(colors[i]).font(bolds[i]?'Helvetica-Bold':'Helvetica').fontSize(FONT_SIZE).text(val||'—',cx+PADDING,yStart+PADDING,{width:colWidths[i]-PADDING*2,lineBreak:true}); cx+=colWidths[i]; }); doc.rect(xStart,yStart+rowH-0.5,anchoUtil,0.5).fill('#dde3ec'); };
+    const drawHeader=(labels,widths,xStart,yStart)=>{ const anchoUtil=842-80; doc.rect(xStart,yStart,anchoUtil,MIN_H).fill(AZUL); let cx=xStart; labels.forEach((lbl,i)=>{ doc.fillColor(BLANCO).font('Helvetica-Bold').fontSize(FONT_SIZE).text(lbl,cx+PADDING,yStart+5,{width:widths[i]-PADDING*2,lineBreak:false}); cx+=widths[i]; }); return yStart+MIN_H; };
 
     const PW=842,MARGIN=40,anchoUtil=PW-MARGIN*2;
     const nuevaPagina=(titulo)=>{ doc.addPage({size:'A4',layout:'landscape'}); doc.rect(0,0,PW,26).fill(AZUL); doc.fillColor(BLANCO).font('Helvetica-Bold').fontSize(9).text(titulo+' — continuación',MARGIN,8); return 36; };
