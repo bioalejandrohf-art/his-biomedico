@@ -521,4 +521,4 @@ app.get('/reporte/equipos', authMiddleware, async (req, res) => {
   } catch(e){ console.error('PDF:',e); res.status(500).json({error:'Error PDF'}); }
 });
 
-app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT}`));
