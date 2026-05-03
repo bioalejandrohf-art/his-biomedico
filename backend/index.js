@@ -9,7 +9,15 @@ const PORT = process.env.PORT || 4000;
 const pool = require('./db');
 const SECRET = process.env.SECRET || 'clave_super_segura';
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://his-biomedico.vercel.app',
+    'https://his-biomedico-f8sqqbuxc-ales-projects-6bd3e884.vercel.app',
+    /\.vercel\.app$/,
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 app.get('/', (req, res) => res.send('Servidor funcionando 🚀'));
