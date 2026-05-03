@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import ModalImportar from './ModalImportar';
 import ModalReporte from './ModalReporte';
+import Indicadores from './Indicadores';
 
 const API = 'https://his-biomedico-production.up.railway.app';
 
@@ -857,6 +858,7 @@ export default function App() {
     { id:'repuestos', icon:'📦', label:'Repuestos' },
     { id:'historial', icon:'◷', label:'Historial' },
     ...(['Admin','SuperAdmin'].includes(rol) ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
+    { id:'indicadores', icon:'📊', label:'Indicadores' },
     ...(esSuperAdmin ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
     ...(esSuperAdmin ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
   ];
@@ -866,6 +868,7 @@ export default function App() {
     repuestos:'Inventario de Repuestos', historial:'Historial / Trazabilidad',
     usuarios:'Gestión de Usuarios', instituciones:'Gestión de Instituciones',
     protocolos:'Protocolos de Mantenimiento',
+    indicadores:'Indicadores de Gestión',
   };
   const gravBadge = (g) => g==='GRAVE'?'badge-red':g==='MODERADO'?'badge-orange':'badge-gray';
   const estadoTecnoBadge = (e) => e==='ABIERTO'?'badge-red':e==='EN_REVISION'?'badge-orange':'badge-green';
@@ -1068,6 +1071,10 @@ export default function App() {
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>{[{label:'Total',valor:usuarios.length,cls:'blue'},{label:'Admins',valor:usuarios.filter(u=>u.rol==='Admin'||u.rol==='SuperAdmin').length,cls:'purple'},{label:'Biomédicos',valor:usuarios.filter(u=>u.rol==='Biomedico').length,cls:'green'},{label:'Auditores',valor:usuarios.filter(u=>u.rol==='Auditor').length,cls:'gray'}].map(k=><div key={k.label} className={`kpi-card ${k.cls||'blue'}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
               <div className="panel"><div className="panel-header"><div className="panel-title">Usuarios</div><span className="badge badge-gray">{usuarios.length}</span></div>{usuarios.length===0?<div className="empty-state">Sin usuarios</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Creado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{usuarios.map(u=>(<tr key={u.id}><td style={{fontWeight:500}}>{u.nombre}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{u.email}</td><td><span className={`badge ${u.rol==='Admin'||u.rol==='SuperAdmin'?'badge-purple':u.rol==='Auditor'?'badge-gray':'badge-green'}`}>{u.rol}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{formatFecha(u.creado_en)}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{u.institucion_nombre||'Global'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalUsuario(u)}>✎</button>{u.id!==user?.id&&<button className="btn btn-danger btn-icon" onClick={()=>eliminarUsuario(u.id)}>✕</button>}</div></td></tr>))}</tbody></table>}</div>
             </>)}
+
+            {seccion==='indicadores' && (
+              <Indicadores token={token} esSuperAdmin={esSuperAdmin} institucion={user?.institucion_nombre ? {nombre: user.institucion_nombre} : null} />
+            )}
 
             {seccion==='protocolos'&&esSuperAdmin&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
