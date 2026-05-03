@@ -20,26 +20,19 @@ app.get('/', (req, res) => res.send('Servidor funcionando 🚀'));
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization;
   if (!token) return res.status(403).json({ error: 'No autorizado' });
-  try {
-    req.user = jwt.verify(token, SECRET);
-    next();
-  } catch {
-    return res.status(403).json({ error: 'Token inválido' });
-  }
+  try { req.user = jwt.verify(token, SECRET); next(); }
+  catch { return res.status(403).json({ error: 'Token inválido' }); }
 };
-
 const soloAdmin = (req, res, next) => {
   if (!['Admin','SuperAdmin'].includes(req.user?.rol))
     return res.status(403).json({ error: 'Solo administradores' });
   next();
 };
-
 const soloSuperAdmin = (req, res, next) => {
   if (req.user?.rol !== 'SuperAdmin')
     return res.status(403).json({ error: 'Solo SuperAdmin' });
   next();
 };
-
 const filtroInstitucion = (req) => {
   if (req.user?.rol === 'SuperAdmin') return null;
   return req.user?.institucion_id || null;
@@ -57,12 +50,10 @@ const registrarAuditoria = async (req, accion, modulo, recurso_id) => {
     );
   } catch(e) { console.error('Auditoría:', e.message); }
 };
-
 const registrarHistorial = async (equipo_id, accion, descripcion, institucion_id) => {
   try {
     await pool.query(
-      `INSERT INTO historial_equipos (equipo_id, accion, descripcion, institucion_id)
-       VALUES ($1,$2,$3,$4)`,
+      `INSERT INTO historial_equipos (equipo_id, accion, descripcion, institucion_id) VALUES ($1,$2,$3,$4)`,
       [equipo_id, accion, descripcion, institucion_id||null]
     );
   } catch(e) { console.error('Historial:', e.message); }
@@ -75,7 +66,6 @@ app.get('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
   const result = await pool.query('SELECT * FROM instituciones ORDER BY nombre');
   res.json(result.rows);
 });
-
 app.post('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { nombre, nit, direccion, ciudad, telefono, email, logo_url, codigo_reps } = req.body;
@@ -90,7 +80,6 @@ app.post('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 app.put('/instituciones/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -103,14 +92,12 @@ app.put('/instituciones/:id', authMiddleware, soloSuperAdmin, async (req, res) =
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-
 app.delete('/instituciones/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     await pool.query('UPDATE instituciones SET activa=false WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-
 app.post('/instituciones/seleccionar/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   const inst = await pool.query('SELECT * FROM instituciones WHERE id=$1', [req.params.id]);
   if (!inst.rows.length) return res.status(404).json({ error: 'Institución no encontrada' });
@@ -138,7 +125,6 @@ app.post('/register', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
   const user = await pool.query('SELECT * FROM usuarios WHERE email=$1', [email]);
@@ -146,25 +132,11 @@ app.post('/login', async (req, res) => {
   const valid = await bcrypt.compare(password, user.rows[0].password);
   if (!valid) return res.status(400).json({ error: 'Contraseña incorrecta' });
   const u = user.rows[0];
-
-  const token = jwt.sign(
-    { id: u.id, rol: u.rol, nombre: u.nombre,
-      institucion_id: u.institucion_id || null,
-      institucion_nombre: null },
-    SECRET
-  );
-
   if (u.institucion_id) {
     const inst = await pool.query('SELECT nombre FROM instituciones WHERE id=$1', [u.institucion_id]);
-    const tokenConInst = jwt.sign(
-      { id: u.id, rol: u.rol, nombre: u.nombre,
-        institucion_id: u.institucion_id,
-        institucion_nombre: inst.rows[0]?.nombre || '' },
-      SECRET
-    );
-    return res.json({ token: tokenConInst });
+    return res.json({ token: jwt.sign({ id: u.id, rol: u.rol, nombre: u.nombre, institucion_id: u.institucion_id, institucion_nombre: inst.rows[0]?.nombre || '' }, SECRET) });
   }
-  res.json({ token });
+  res.json({ token: jwt.sign({ id: u.id, rol: u.rol, nombre: u.nombre, institucion_id: null, institucion_nombre: null }, SECRET) });
 });
 
 //////////////////////////////////////////////////
@@ -179,7 +151,6 @@ app.get('/usuarios', authMiddleware, soloAdmin, async (req, res) => {
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
-
 app.put('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -195,11 +166,9 @@ app.put('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-
 app.delete('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
   try {
-    if (parseInt(req.params.id)===req.user.id)
-      return res.status(400).json({ error: 'No puedes eliminarte' });
+    if (parseInt(req.params.id)===req.user.id) return res.status(400).json({ error: 'No puedes eliminarte' });
     await pool.query('DELETE FROM usuarios WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -216,48 +185,39 @@ app.get('/equipos', authMiddleware, async (req, res) => {
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
-
 app.post('/equipos', authMiddleware, async (req, res) => {
   const data = req.body;
   const instId = req.user.institucion_id || null;
   const result = await pool.query(
-    `INSERT INTO equipos_biomedicos
-    (nombre,marca,modelo,serie,registro_invima,fecha_vencimiento_invima,
-     clasificacion_riesgo,ubicacion,servicio,estado,institucion_id)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,
-     data.fecha_vencimiento_invima,data.clasificacion_riesgo,
-     data.ubicacion,data.servicio,data.estado,instId]
+    `INSERT INTO equipos_biomedicos (nombre,marca,modelo,serie,registro_invima,fecha_vencimiento_invima,clasificacion_riesgo,ubicacion,servicio,estado,institucion_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,instId]
   );
   const equipo = result.rows[0];
   await registrarAuditoria(req,'CREAR','EQUIPOS',equipo.id);
   await registrarHistorial(equipo.id,'CREACIÓN',`Equipo creado: ${equipo.nombre}`,instId);
   res.json(equipo);
 });
-
 app.put('/equipos/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const data = req.body;
   await pool.query(
-    `UPDATE equipos_biomedicos SET nombre=$1,marca=$2,modelo=$3,serie=$4,
-     registro_invima=$5,fecha_vencimiento_invima=$6,clasificacion_riesgo=$7,
-     ubicacion=$8,servicio=$9,estado=$10 WHERE id=$11`,
-    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,
-     data.fecha_vencimiento_invima,data.clasificacion_riesgo,
-     data.ubicacion,data.servicio,data.estado,id]
+    `UPDATE equipos_biomedicos SET nombre=$1,marca=$2,modelo=$3,serie=$4,registro_invima=$5,fecha_vencimiento_invima=$6,clasificacion_riesgo=$7,ubicacion=$8,servicio=$9,estado=$10 WHERE id=$11`,
+    [data.nombre,data.marca,data.modelo,data.serie,data.registro_invima,data.fecha_vencimiento_invima,data.clasificacion_riesgo,data.ubicacion,data.servicio,data.estado,id]
   );
   await registrarAuditoria(req,'EDITAR','EQUIPOS',id);
   await registrarHistorial(id,'EDICIÓN','Equipo actualizado',req.user.institucion_id);
   res.json({ ok: true });
 });
-
 app.delete('/equipos/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const existe = await pool.query('SELECT * FROM equipos_biomedicos WHERE id=$1',[id]);
     if (!existe.rows.length) return res.status(404).json({ error: 'Equipo no encontrado' });
     await registrarAuditoria(req,'ELIMINAR','EQUIPOS',id);
+    await pool.query('DELETE FROM repuesto_equipo WHERE equipo_id=$1',[id]);
     await pool.query('DELETE FROM historial_equipos WHERE equipo_id=$1',[id]);
+    await pool.query('DELETE FROM ot_repuestos WHERE mantenimiento_id IN (SELECT id FROM mantenimientos WHERE equipo_id=$1)',[id]);
     await pool.query('DELETE FROM mantenimientos WHERE equipo_id=$1',[id]);
     await pool.query('DELETE FROM tecnovigilancia WHERE equipo_id=$1',[id]);
     await pool.query('DELETE FROM equipos_biomedicos WHERE id=$1',[id]);
@@ -282,36 +242,70 @@ app.post('/mantenimientos', authMiddleware, async (req, res) => {
     res.json(result.rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-
 app.get('/mantenimientos', authMiddleware, async (req, res) => {
   const instId = filtroInstitucion(req);
   const q = instId
     ? `SELECT m.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio
-       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id
-       WHERE m.institucion_id=$1
+       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id WHERE m.institucion_id=$1
        ORDER BY CASE m.prioridad WHEN 'CRITICA' THEN 1 WHEN 'ALTA' THEN 2 ELSE 3 END, m.fecha_programada`
     : `SELECT m.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,i.nombre AS institucion_nombre
-       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id
-       LEFT JOIN instituciones i ON i.id=m.institucion_id
+       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id LEFT JOIN instituciones i ON i.id=m.institucion_id
        ORDER BY i.nombre, m.fecha_programada`;
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
 
+// Finalizar OT con repuestos usados
 app.put('/mantenimientos/:id', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { observaciones } = req.body;
-    const m = await pool.query('SELECT * FROM mantenimientos WHERE id=$1',[id]);
+    const { observaciones, repuestos_usados } = req.body; // repuestos_usados: [{repuesto_id, cantidad}]
+    const m = await client.query('SELECT * FROM mantenimientos WHERE id=$1',[id]);
     if (!m.rows.length) return res.status(404).json({ error: 'OT no encontrada' });
-    await pool.query(
+
+    await client.query('BEGIN');
+    await client.query(
       `UPDATE mantenimientos SET estado='REALIZADO',fecha_realizada=NOW(),observaciones=$1 WHERE id=$2`,
       [observaciones||null, id]
     );
+
+    // Procesar repuestos usados
+    if (Array.isArray(repuestos_usados) && repuestos_usados.length>0) {
+      for (const r of repuestos_usados) {
+        if (!r.repuesto_id || !r.cantidad || r.cantidad<=0) continue;
+        const rep = await client.query('SELECT stock_actual, costo_unitario FROM repuestos WHERE id=$1', [r.repuesto_id]);
+        if (!rep.rows.length) continue;
+        const stock = rep.rows[0].stock_actual;
+        if (stock < r.cantidad) throw new Error(`Stock insuficiente para repuesto ID ${r.repuesto_id}`);
+        const costoTotal = (rep.rows[0].costo_unitario || 0) * r.cantidad;
+        // descontar stock
+        await client.query('UPDATE repuestos SET stock_actual=stock_actual-$1 WHERE id=$2', [r.cantidad, r.repuesto_id]);
+        // registrar movimiento
+        await client.query(
+          `INSERT INTO movimientos_repuestos (repuesto_id,tipo,cantidad,motivo,mantenimiento_id,usuario_id,institucion_id,descripcion)
+           VALUES ($1,'SALIDA',$2,'USO_OT',$3,$4,$5,$6)`,
+          [r.repuesto_id, r.cantidad, id, req.user.id, req.user.institucion_id||null, `Usado en OT #${id}`]
+        );
+        // registrar relación OT-repuesto
+        await client.query(
+          `INSERT INTO ot_repuestos (mantenimiento_id,repuesto_id,cantidad,costo_total) VALUES ($1,$2,$3,$4)
+           ON CONFLICT (mantenimiento_id,repuesto_id) DO UPDATE SET cantidad=ot_repuestos.cantidad+EXCLUDED.cantidad, costo_total=ot_repuestos.costo_total+EXCLUDED.costo_total`,
+          [id, r.repuesto_id, r.cantidad, costoTotal]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
     await registrarAuditoria(req,'FINALIZAR','MANTENIMIENTO',id);
     await registrarHistorial(m.rows[0].equipo_id,'MANTENIMIENTO',`OT finalizada: ${m.rows[0].tipo}`,req.user.institucion_id);
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/mantenimientos/kpis', authMiddleware, async (req, res) => {
@@ -323,17 +317,25 @@ app.get('/mantenimientos/kpis', authMiddleware, async (req, res) => {
     const pendientes = await pool.query(`SELECT COUNT(*) FROM mantenimientos WHERE estado='PENDIENTE'${instId?' AND institucion_id=$1':''}`, p);
     const realizados = await pool.query(`SELECT COUNT(*) FROM mantenimientos WHERE estado='REALIZADO'${instId?' AND institucion_id=$1':''}`, p);
     const criticas   = await pool.query(`SELECT COUNT(*) FROM mantenimientos WHERE prioridad='CRITICA' AND estado='PENDIENTE'${instId?' AND institucion_id=$1':''}`, p);
-    const mttr = await pool.query(`
-      SELECT ROUND(AVG(EXTRACT(EPOCH FROM (fecha_realizada-fecha_programada))/86400)::numeric,1) AS mttr
-      FROM mantenimientos WHERE estado='REALIZADO' AND fecha_realizada IS NOT NULL ${instId?' AND institucion_id=$1':''}`, p);
+    const mttr = await pool.query(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM (fecha_realizada-fecha_programada))/86400)::numeric,1) AS mttr FROM mantenimientos WHERE estado='REALIZADO' AND fecha_realizada IS NOT NULL ${instId?' AND institucion_id=$1':''}`, p);
     res.json({
-      total:      parseInt(total.rows[0].count),
-      pendientes: parseInt(pendientes.rows[0].count),
-      realizados: parseInt(realizados.rows[0].count),
-      criticas:   parseInt(criticas.rows[0].count),
-      mttr:       mttr.rows[0].mttr||0,
+      total: parseInt(total.rows[0].count), pendientes: parseInt(pendientes.rows[0].count),
+      realizados: parseInt(realizados.rows[0].count), criticas: parseInt(criticas.rows[0].count),
+      mttr: mttr.rows[0].mttr||0,
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Repuestos usados en una OT específica
+app.get('/mantenimientos/:id/repuestos', authMiddleware, async (req, res) => {
+  const result = await pool.query(
+    `SELECT or_.*, r.nombre, r.codigo, r.unidad_medida
+     FROM ot_repuestos or_
+     JOIN repuestos r ON r.id = or_.repuesto_id
+     WHERE or_.mantenimiento_id = $1`,
+    [req.params.id]
+  );
+  res.json(result.rows);
 });
 
 //////////////////////////////////////////////////
@@ -342,21 +344,11 @@ app.get('/mantenimientos/kpis', authMiddleware, async (req, res) => {
 app.get('/tecnovigilancia', authMiddleware, async (req, res) => {
   const instId = filtroInstitucion(req);
   const q = instId
-    ? `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre
-       FROM tecnovigilancia t
-       LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id
-       LEFT JOIN usuarios u ON u.id=t.reportado_por
-       WHERE t.institucion_id=$1 ORDER BY t.created_at DESC`
-    : `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre,i.nombre AS institucion_nombre
-       FROM tecnovigilancia t
-       LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id
-       LEFT JOIN usuarios u ON u.id=t.reportado_por
-       LEFT JOIN instituciones i ON i.id=t.institucion_id
-       ORDER BY t.created_at DESC`;
+    ? `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por WHERE t.institucion_id=$1 ORDER BY t.created_at DESC`
+    : `SELECT t.*,e.nombre AS equipo_nombre,u.nombre AS reportado_nombre,i.nombre AS institucion_nombre FROM tecnovigilancia t LEFT JOIN equipos_biomedicos e ON e.id=t.equipo_id LEFT JOIN usuarios u ON u.id=t.reportado_por LEFT JOIN instituciones i ON i.id=t.institucion_id ORDER BY t.created_at DESC`;
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
-
 app.post('/tecnovigilancia', authMiddleware, async (req, res) => {
   try {
     const { equipo_id, tipo, descripcion, fecha_evento, gravedad } = req.body;
@@ -371,12 +363,181 @@ app.post('/tecnovigilancia', authMiddleware, async (req, res) => {
     res.json(result.rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-
 app.put('/tecnovigilancia/:id', authMiddleware, async (req, res) => {
   try {
     await pool.query('UPDATE tecnovigilancia SET estado=$1 WHERE id=$2',[req.body.estado,req.params.id]);
     await registrarAuditoria(req,'ACTUALIZAR','TECNOVIGILANCIA',req.params.id);
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+//////////////////////////////////////////////////
+// 📦 REPUESTOS
+//////////////////////////////////////////////////
+app.get('/repuestos', authMiddleware, async (req, res) => {
+  const instId = filtroInstitucion(req);
+  const q = instId
+    ? `SELECT * FROM repuestos WHERE institucion_id=$1 ORDER BY nombre`
+    : `SELECT r.*,i.nombre AS institucion_nombre FROM repuestos r LEFT JOIN instituciones i ON i.id=r.institucion_id ORDER BY i.nombre,r.nombre`;
+  const result = await pool.query(q, instId ? [instId] : []);
+  res.json(result.rows);
+});
+
+app.get('/repuestos/:id', authMiddleware, async (req, res) => {
+  const r = await pool.query('SELECT * FROM repuestos WHERE id=$1', [req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+  const equipos = await pool.query(
+    `SELECT e.id, e.nombre FROM repuesto_equipo re JOIN equipos_biomedicos e ON e.id=re.equipo_id WHERE re.repuesto_id=$1`,
+    [req.params.id]
+  );
+  res.json({ ...r.rows[0], equipos_compatibles: equipos.rows });
+});
+
+app.post('/repuestos', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { codigo, nombre, descripcion, categoria, marca, modelo, unidad_medida,
+      stock_actual, stock_minimo, costo_unitario, proveedor, ubicacion, lote,
+      fecha_vencimiento, equipos_compatibles } = req.body;
+    const instId = req.user.institucion_id || null;
+    await client.query('BEGIN');
+    const result = await client.query(
+      `INSERT INTO repuestos (codigo,nombre,descripcion,categoria,marca,modelo,unidad_medida,
+       stock_actual,stock_minimo,costo_unitario,proveedor,ubicacion,lote,fecha_vencimiento,institucion_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [codigo||null, nombre, descripcion||null, categoria||null, marca||null, modelo||null,
+       unidad_medida||'UND', stock_actual||0, stock_minimo||0, costo_unitario||0,
+       proveedor||null, ubicacion||null, lote||null, fecha_vencimiento||null, instId]
+    );
+    const rep = result.rows[0];
+    if (Array.isArray(equipos_compatibles)) {
+      for (const eqId of equipos_compatibles) {
+        await client.query('INSERT INTO repuesto_equipo (repuesto_id,equipo_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rep.id, eqId]);
+      }
+    }
+    // Si tiene stock inicial, registrar movimiento
+    if ((stock_actual||0) > 0) {
+      await client.query(
+        `INSERT INTO movimientos_repuestos (repuesto_id,tipo,cantidad,motivo,usuario_id,institucion_id,descripcion)
+         VALUES ($1,'ENTRADA',$2,'COMPRA',$3,$4,'Stock inicial')`,
+        [rep.id, stock_actual, req.user.id, instId]
+      );
+    }
+    await client.query('COMMIT');
+    await registrarAuditoria(req,'CREAR','REPUESTOS',rep.id);
+    res.json(rep);
+  } catch(e) {
+    await client.query('ROLLBACK');
+    if (e.code==='23505') return res.status(400).json({ error: 'Código ya existe' });
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+app.put('/repuestos/:id', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { codigo, nombre, descripcion, categoria, marca, modelo, unidad_medida,
+      stock_minimo, costo_unitario, proveedor, ubicacion, lote, fecha_vencimiento,
+      equipos_compatibles } = req.body;
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE repuestos SET codigo=$1,nombre=$2,descripcion=$3,categoria=$4,marca=$5,modelo=$6,
+       unidad_medida=$7,stock_minimo=$8,costo_unitario=$9,proveedor=$10,ubicacion=$11,lote=$12,
+       fecha_vencimiento=$13,updated_at=NOW() WHERE id=$14`,
+      [codigo||null, nombre, descripcion||null, categoria||null, marca||null, modelo||null,
+       unidad_medida||'UND', stock_minimo||0, costo_unitario||0, proveedor||null,
+       ubicacion||null, lote||null, fecha_vencimiento||null, id]
+    );
+    if (Array.isArray(equipos_compatibles)) {
+      await client.query('DELETE FROM repuesto_equipo WHERE repuesto_id=$1', [id]);
+      for (const eqId of equipos_compatibles) {
+        await client.query('INSERT INTO repuesto_equipo (repuesto_id,equipo_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, eqId]);
+      }
+    }
+    await client.query('COMMIT');
+    await registrarAuditoria(req,'EDITAR','REPUESTOS',id);
+    res.json({ ok: true });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+app.delete('/repuestos/:id', authMiddleware, async (req, res) => {
+  try {
+    await registrarAuditoria(req,'ELIMINAR','REPUESTOS',req.params.id);
+    await pool.query('DELETE FROM repuesto_equipo WHERE repuesto_id=$1',[req.params.id]);
+    await pool.query('DELETE FROM movimientos_repuestos WHERE repuesto_id=$1',[req.params.id]);
+    await pool.query('DELETE FROM ot_repuestos WHERE repuesto_id=$1',[req.params.id]);
+    await pool.query('DELETE FROM repuestos WHERE id=$1',[req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Movimientos
+app.get('/repuestos/:id/movimientos', authMiddleware, async (req, res) => {
+  const result = await pool.query(
+    `SELECT m.*, u.nombre AS usuario_nombre
+     FROM movimientos_repuestos m
+     LEFT JOIN usuarios u ON u.id=m.usuario_id
+     WHERE m.repuesto_id=$1 ORDER BY m.fecha DESC`,
+    [req.params.id]
+  );
+  res.json(result.rows);
+});
+
+app.post('/repuestos/:id/movimiento', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { tipo, cantidad, motivo, descripcion } = req.body;
+    if (!['ENTRADA','SALIDA','AJUSTE'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
+    if (!cantidad || cantidad<=0) return res.status(400).json({ error: 'Cantidad debe ser mayor a 0' });
+    await client.query('BEGIN');
+    const r = await client.query('SELECT stock_actual FROM repuestos WHERE id=$1', [id]);
+    if (!r.rows.length) throw new Error('Repuesto no encontrado');
+    let nuevoStock;
+    if (tipo==='ENTRADA') nuevoStock = r.rows[0].stock_actual + cantidad;
+    else if (tipo==='SALIDA') {
+      if (r.rows[0].stock_actual < cantidad) throw new Error('Stock insuficiente');
+      nuevoStock = r.rows[0].stock_actual - cantidad;
+    } else nuevoStock = cantidad; // AJUSTE: se establece directamente
+    await client.query('UPDATE repuestos SET stock_actual=$1,updated_at=NOW() WHERE id=$2', [nuevoStock, id]);
+    await client.query(
+      `INSERT INTO movimientos_repuestos (repuesto_id,tipo,cantidad,motivo,descripcion,usuario_id,institucion_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, tipo, cantidad, motivo||null, descripcion||null, req.user.id, req.user.institucion_id||null]
+    );
+    await client.query('COMMIT');
+    await registrarAuditoria(req,tipo,'REPUESTOS',id);
+    res.json({ ok: true, stock_actual: nuevoStock });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+// KPIs de repuestos
+app.get('/repuestos/kpis/general', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const w = instId ? 'WHERE institucion_id=$1' : '';
+    const p = instId ? [instId] : [];
+    const total = await pool.query(`SELECT COUNT(*) FROM repuestos ${w}`, p);
+    const stockBajo = await pool.query(`SELECT COUNT(*) FROM repuestos WHERE stock_actual<=stock_minimo AND stock_minimo>0 ${instId?'AND institucion_id=$1':''}`, p);
+    const sinStock = await pool.query(`SELECT COUNT(*) FROM repuestos WHERE stock_actual=0 ${instId?'AND institucion_id=$1':''}`, p);
+    const valorTotal = await pool.query(`SELECT COALESCE(SUM(stock_actual*costo_unitario),0) AS total FROM repuestos ${w}`, p);
+    const porCategoria = await pool.query(
+      `SELECT COALESCE(categoria,'SIN CATEGORÍA') AS categoria, COUNT(*) as total
+       FROM repuestos ${w} GROUP BY categoria ORDER BY total DESC LIMIT 8`, p);
+    res.json({
+      total: parseInt(total.rows[0].count),
+      stockBajo: parseInt(stockBajo.rows[0].count),
+      sinStock: parseInt(sinStock.rows[0].count),
+      valorTotal: parseFloat(valorTotal.rows[0].total),
+      porCategoria: porCategoria.rows
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -396,6 +557,8 @@ app.get('/dashboard/kpis', authMiddleware, async (req, res) => {
     const otPendientes  = await pool.query(`SELECT COUNT(*) FROM mantenimientos WHERE estado='PENDIENTE'${instId?' AND institucion_id=$1':''}`, p);
     const otRealizados  = await pool.query(`SELECT COUNT(*) FROM mantenimientos WHERE estado='REALIZADO'${instId?' AND institucion_id=$1':''}`, p);
     const tecnoAbiertos = await pool.query(`SELECT COUNT(*) FROM tecnovigilancia WHERE estado='ABIERTO'${instId?' AND institucion_id=$1':''}`, p);
+    const repuestosTotal = await pool.query(`SELECT COUNT(*) FROM repuestos ${w}`, p);
+    const repuestosBajo  = await pool.query(`SELECT COUNT(*) FROM repuestos WHERE stock_actual<=stock_minimo AND stock_minimo>0 ${instId?'AND institucion_id=$1':''}`, p);
 
     const porServicio = await pool.query(
       `SELECT servicio, COUNT(*) as total FROM equipos_biomedicos
@@ -418,22 +581,22 @@ app.get('/dashboard/kpis', authMiddleware, async (req, res) => {
        GROUP BY clasificacion_riesgo ORDER BY clasificacion_riesgo`, p);
 
     const porGravedad = await pool.query(
-      `SELECT gravedad, COUNT(*) as total FROM tecnovigilancia
-       ${instId?'WHERE institucion_id=$1':''}
-       GROUP BY gravedad`, p);
+      `SELECT gravedad, COUNT(*) as total FROM tecnovigilancia ${instId?'WHERE institucion_id=$1':''} GROUP BY gravedad`, p);
 
     res.json({
       totalEquipos: parseInt(totalEquipos.rows[0].count),
-      activos:      parseInt(activos.rows[0].count),
-      enMant:       parseInt(enMant.rows[0].count),
-      invVencidos:  parseInt(invVencidos.rows[0].count),
+      activos: parseInt(activos.rows[0].count),
+      enMant: parseInt(enMant.rows[0].count),
+      invVencidos: parseInt(invVencidos.rows[0].count),
       otPendientes: parseInt(otPendientes.rows[0].count),
       otRealizados: parseInt(otRealizados.rows[0].count),
-      tecnoAbiertos:parseInt(tecnoAbiertos.rows[0].count),
-      porServicio:  porServicio.rows,
-      porMes:       porMes.rows,
-      porRiesgo:    porRiesgo.rows,
-      porGravedad:  porGravedad.rows,
+      tecnoAbiertos: parseInt(tecnoAbiertos.rows[0].count),
+      repuestosTotal: parseInt(repuestosTotal.rows[0].count),
+      repuestosBajo: parseInt(repuestosBajo.rows[0].count),
+      porServicio: porServicio.rows,
+      porMes: porMes.rows,
+      porRiesgo: porRiesgo.rows,
+      porGravedad: porGravedad.rows,
     });
   } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
 });
@@ -442,10 +605,7 @@ app.get('/dashboard/kpis', authMiddleware, async (req, res) => {
 // 📜 HISTORIAL
 //////////////////////////////////////////////////
 app.get('/historial/:equipo_id', authMiddleware, async (req, res) => {
-  const result = await pool.query(
-    'SELECT * FROM historial_equipos WHERE equipo_id=$1 ORDER BY fecha DESC',
-    [req.params.equipo_id]
-  );
+  const result = await pool.query('SELECT * FROM historial_equipos WHERE equipo_id=$1 ORDER BY fecha DESC', [req.params.equipo_id]);
   res.json(result.rows);
 });
 
@@ -456,15 +616,9 @@ app.get('/reporte/equipos', authMiddleware, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const equipos = await pool.query(
-      `SELECT * FROM equipos_biomedicos ${instId?'WHERE institucion_id=$1':''} ORDER BY servicio,nombre`,
-      instId?[instId]:[]
-    );
+      `SELECT * FROM equipos_biomedicos ${instId?'WHERE institucion_id=$1':''} ORDER BY servicio,nombre`, instId?[instId]:[]);
     const mants = await pool.query(
-      `SELECT m.*,e.nombre AS equipo_nombre FROM mantenimientos m
-       JOIN equipos_biomedicos e ON e.id=m.equipo_id
-       ${instId?'WHERE m.institucion_id=$1':''} ORDER BY m.fecha_programada DESC LIMIT 20`,
-      instId?[instId]:[]
-    );
+      `SELECT m.*,e.nombre AS equipo_nombre FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id ${instId?'WHERE m.institucion_id=$1':''} ORDER BY m.fecha_programada DESC LIMIT 20`, instId?[instId]:[]);
     const usuario = await pool.query('SELECT nombre,rol FROM usuarios WHERE id=$1',[req.user?.id]);
     let instNombre = req.user?.institucion_nombre || 'Todas las instituciones';
 
