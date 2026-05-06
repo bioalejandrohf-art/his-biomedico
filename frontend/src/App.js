@@ -55,7 +55,7 @@ const css = `
   .session-dot{width:6px;height:6px;border-radius:50%;background:${G.accent};display:inline-block}
   .topbar{background:${G.sidebar};border-bottom:1px solid ${G.cardBorder};padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
   .topbar-title{font-size:16px;font-weight:600;color:${G.text}}
-  .topbar-right{display:flex;align-items:center;gap:12px}
+  .topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:4px;border:none;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;transition:all 0.15s}
   .btn-primary{background:${G.accent};color:#0a1520}.btn-primary:hover{background:${G.accentDim}}
   .btn-ghost{background:transparent;border:1px solid ${G.cardBorder};color:${G.textMuted}}.btn-ghost:hover{border-color:${G.accent};color:${G.accent}}
@@ -614,7 +614,6 @@ function ModalDetalleRepuesto({ repuesto, token, onClose }) {
   );
 }
 
-// MODAL PROTOCOLO
 function ModalProtocolo({ protocolo, tiposEquipo, token, onClose, onSaved }) {
   const esNuevo = !protocolo;
   const [form, setForm] = useState({
@@ -847,8 +846,8 @@ export default function App() {
     } catch(e) { console.error(e); }
   };
 
+  // EXPORTAR INVENTARIO EN FORMATO PLANTILLA GTE-FR-001
   const exportarPlantillaInventario = async (formato) => {
-    // Obtener info de la institución
     let inst = null;
     if (user?.institucion_id) {
       try {
@@ -866,11 +865,10 @@ export default function App() {
     const equiposExport = filtrados.length > 0 ? filtrados : equipos;
 
     if (formato === 'excel') {
-      // EXPORTAR A EXCEL CON FORMATO IDÉNTICO
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
-      const headers = [
+      const headerData = [
         ['', '', '', instNombre, '', '', '', '', '', 'VERSION:', version],
         ['', '', '', '', '', '', '', '', '', 'VIGENCIA:', vigencia],
         ['', '', '', `INVENTARIO DE EQUIPOS BIOMEDICOS ${anio}`, '', '', '', '', '', 'CÓDIGO:', codigo],
@@ -895,22 +893,21 @@ export default function App() {
         eq.estado || ''
       ]);
 
-      const data = [...headers, ...filas];
+      const data = [...headerData, ...filas];
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws['!cols'] = [
         {wch:6},{wch:11},{wch:32},{wch:18},{wch:22},{wch:21},{wch:20},{wch:23},{wch:24},{wch:8},{wch:14},{wch:12}
       ];
-      // Merges del encabezado
       ws['!merges'] = [
-        {s:{r:0,c:3},e:{r:1,c:8}},  // Nombre institución
-        {s:{r:2,c:3},e:{r:3,c:8}},  // Título inventario
+        {s:{r:0,c:3},e:{r:1,c:8}},
+        {s:{r:2,c:3},e:{r:3,c:8}},
       ];
       XLSX.utils.book_append_sheet(wb, ws, 'INVENTARIO');
       XLSX.writeFile(wb, `Inventario_${codigo}_${instNombre.replace(/\s+/g,'_')}.xlsx`);
       return;
     }
 
-    // EXPORTAR A PDF (ventana imprimible con réplica exacta)
+    // PDF
     const w = window.open('', '_blank');
     if (!w) return alert('Permite ventanas emergentes para generar el PDF');
     const fechaHoy = new Date().toLocaleDateString('es-CO');
@@ -944,12 +941,10 @@ export default function App() {
       table.encabezado .titulo-doc { font-weight:bold; text-align:center; font-size:14px; background:#0a2342; color:#fff; }
       table.encabezado .meta { font-size:9px; width:160px; }
       table.encabezado .meta b { color:#0a2342; }
-
       table.inventario { border-collapse: collapse; width:100%; }
       table.inventario th, table.inventario td { border: 1px solid #555; padding: 4px 5px; vertical-align:middle; font-size:8.5px; }
       table.inventario th { background:#0a2342; color:#fff; font-weight:bold; text-align:center; font-size:9px; padding:6px 4px; }
       table.inventario tbody tr:nth-child(even) { background:#f7fafc; }
-      table.inventario tbody tr:hover { background:#e6f0fa; }
       .footer { font-size:8px; color:#666; text-align:center; margin-top:6px; }
     </style></head><body>
 
@@ -1086,7 +1081,9 @@ export default function App() {
           <div className="topbar">
             <div className="topbar-title">{titulos[seccion]}</div>
             <div className="topbar-right">
-              <button className="btn btn-ghost" onClick={descargarPDF}>↓ PDF</button>
+              {seccion==='inventario' && <button className="btn btn-orange" onClick={()=>exportarPlantillaInventario('pdf')} title="Plantilla GTE-FR-001 PDF">📋 Plantilla PDF</button>}
+              {seccion==='inventario' && <button className="btn btn-orange" onClick={()=>exportarPlantillaInventario('excel')} title="Plantilla GTE-FR-001 Excel">📊 Plantilla Excel</button>}
+              {seccion!=='inventario' && <button className="btn btn-ghost" onClick={descargarPDF}>↓ PDF</button>}
               {rol!=='Auditor'&&seccion==='mantenimiento'&&<button className="btn btn-primary" onClick={()=>setModalOT(true)}>+ Nueva OT</button>}
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-purple" onClick={()=>setModalImportar(true)}>📊 Importar Excel</button>}
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-primary" onClick={()=>{setEditando(null);setForm(formVacio);}}>+ Nuevo equipo</button>}
@@ -1154,64 +1151,67 @@ export default function App() {
                 </div>
               )}
               <div className="search-bar"><span>⌕</span><input placeholder="Buscar..." value={filtro} onChange={e=>setFiltro(e.target.value)} /></div>
-              <div className="panel"><div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>{filtrados.length===0 ? <div className="empty-state">Sin equipos</div> : (
-  <table className="data-table">
-    <thead><tr>
-      <th>A. Fijo</th>
-      <th>Nombre</th>
-      <th>Tipo</th>
-      <th>Marca/Modelo</th>
-      <th>Serie</th>
-      <th>INVIMA</th>
-      <th>Vencimiento</th>
-      <th>Riesgo</th>
-      <th>Servicio</th>
-      <th>Garantía</th>
-      <th>Estado</th>
-      {esSuperAdmin&&<th>Institución</th>}
-      <th></th>
-    </tr></thead>
-    <tbody>
-      {filtrados.map(eq=>{
-        const inv=getEstadoInvima(eq.fecha_vencimiento_invima);
-        const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';
-        const garVencida = eq.garantia && eq.garantia_vencimiento && new Date(eq.garantia_vencimiento) < new Date();
-        return (
-          <tr key={eq.id}>
-            <td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{eq.activo_fijo||'—'}</td>
-            <td style={{fontWeight:500}}>{eq.nombre}</td>
-            <td>{eq.tipo_equipo?<span className="badge badge-purple">{eq.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td>
-            <td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td>
-            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td>
-            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td>
-            <td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td>
-            <td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td>
-            <td style={{color:G.textMuted}}>{eq.servicio||'—'}</td>
-            <td>
-              {eq.garantia ? (
-                <div>
-                  <span className={`badge ${garVencida?'badge-red':'badge-green'}`}>{garVencida?'VENCIDA':'SÍ'}</span>
-                  {eq.garantia_vencimiento && <div style={{fontSize:10,color:G.textMuted,marginTop:2,fontFamily:'IBM Plex Mono'}}>{formatFecha(eq.garantia_vencimiento)}</div>}
-                </div>
-              ) : <span className="badge badge-gray">NO</span>}
-            </td>
-            <td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>
-            {esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}
-            <td>
-              <div style={{display:'flex',gap:4}}>
-                <button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>
-                {rol!=='Auditor'&&<>
-                  <button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button>
-                  <button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button>
-                </>}
+              <div className="panel">
+                <div className="panel-header"><div className="panel-title">Equipos</div><div style={{fontSize:11,color:G.textMuted}}>{filtrados.length}</div></div>
+                {filtrados.length===0 ? <div className="empty-state">Sin equipos</div> : (
+                  <table className="data-table">
+                    <thead><tr>
+                      <th>A. Fijo</th>
+                      <th>Nombre</th>
+                      <th>Tipo</th>
+                      <th>Marca/Modelo</th>
+                      <th>Serie</th>
+                      <th>INVIMA</th>
+                      <th>Vencimiento</th>
+                      <th>Riesgo</th>
+                      <th>Servicio</th>
+                      <th>Garantía</th>
+                      <th>Estado</th>
+                      {esSuperAdmin&&<th>Institución</th>}
+                      <th></th>
+                    </tr></thead>
+                    <tbody>
+                      {filtrados.map(eq=>{
+                        const inv=getEstadoInvima(eq.fecha_vencimiento_invima);
+                        const estBadge=eq.estado==='Activo'?'badge-green':eq.estado==='Mantenimiento'?'badge-orange':'badge-gray';
+                        const garVencida = eq.garantia && eq.garantia_vencimiento && new Date(eq.garantia_vencimiento) < new Date();
+                        return (
+                          <tr key={eq.id}>
+                            <td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{eq.activo_fijo||'—'}</td>
+                            <td style={{fontWeight:500}}>{eq.nombre}</td>
+                            <td>{eq.tipo_equipo?<span className="badge badge-purple">{eq.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td>
+                            <td style={{color:G.textMuted}}>{eq.marca} {eq.modelo}</td>
+                            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.serie}</td>
+                            <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{eq.registro_invima||'—'}</td>
+                            <td><div style={{fontSize:11,fontFamily:'IBM Plex Mono',color:G.textMuted}}>{formatFecha(eq.fecha_vencimiento_invima)}</div>{inv&&<span className={`badge ${inv.cls}`} style={{marginTop:4,display:'inline-block'}}>{inv.label}</span>}</td>
+                            <td>{eq.clasificacion_riesgo?<span className="badge badge-gray">{eq.clasificacion_riesgo}</span>:'—'}</td>
+                            <td style={{color:G.textMuted}}>{eq.servicio||'—'}</td>
+                            <td>
+                              {eq.garantia ? (
+                                <div>
+                                  <span className={`badge ${garVencida?'badge-red':'badge-green'}`}>{garVencida?'VENCIDA':'SÍ'}</span>
+                                  {eq.garantia_vencimiento && <div style={{fontSize:10,color:G.textMuted,marginTop:2,fontFamily:'IBM Plex Mono'}}>{formatFecha(eq.garantia_vencimiento)}</div>}
+                                </div>
+                              ) : <span className="badge badge-gray">NO</span>}
+                            </td>
+                            <td>{eq.estado?<span className={`badge ${estBadge}`}>{eq.estado}</span>:'—'}</td>
+                            {esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{eq.institucion_nombre||'—'}</td>}
+                            <td>
+                              <div style={{display:'flex',gap:4}}>
+                                <button className="btn btn-ghost btn-icon" onClick={()=>verHistorial(eq)}>◷</button>
+                                {rol!=='Auditor'&&<>
+                                  <button className="btn btn-ghost btn-icon" onClick={()=>editar(eq)}>✎</button>
+                                  <button className="btn btn-danger btn-icon" onClick={()=>eliminar(eq.id)}>✕</button>
+                                </>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            </td>
-          </tr>
-        );
-      })}
-    </tbody>
-  </table>
-)}</div>
             </>)}
 
             {seccion==='mantenimiento' && (<>
@@ -1219,11 +1219,11 @@ export default function App() {
               {alertas.length>0&&<div className="alert-bar"><span className="alert-icon">⚠</span><div><div className="alert-title">OTs ≤7 días</div>{alertas.map(a=><div key={a.id} className="alert-item">{a.equipo_nombre} · {formatFecha(a.fecha_programada)}</div>)}</div></div>}
               <div style={{display:'flex',gap:8,marginBottom:16}}>{['TODOS','PENDIENTE','REALIZADO'].map(f=><button key={f} className={`btn ${filtroMant===f?'btn-primary':'btn-ghost'}`} style={{fontSize:11}} onClick={()=>setFiltroMant(f)}>{f}</button>)}</div>
               <div className="panel"><div className="panel-header"><div className="panel-title">Órdenes</div><span className="badge badge-gray">{mantFiltrados.length}</span></div>{mantFiltrados.length===0?<div className="empty-state">Sin órdenes</div>:<table className="data-table"><thead><tr><th>Equipo</th><th>Tipo Equipo</th><th>Servicio</th><th>Tipo</th><th>Prioridad</th><th>Programado</th><th>Realizado</th><th>Estado</th>{esSuperAdmin&&<th>Institución</th>}{rol!=='Auditor'&&<th></th>}</tr></thead><tbody>{mantFiltrados.map(m=>(<tr key={m.id}><td style={{fontWeight:500}}>{m.equipo_nombre}</td><td>{m.tipo_equipo?<span className="badge badge-purple">{m.tipo_equipo}</span>:<span style={{color:G.textMuted,fontSize:11}}>—</span>}</td><td style={{color:G.textMuted,fontSize:11}}>{m.equipo_servicio||'—'}</td><td><span className="badge badge-gray">{m.tipo}</span></td><td><span className={`badge ${prioridadBadge(m.prioridad)}`}>{m.prioridad}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{formatFecha(m.fecha_programada)}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{m.fecha_realizada?formatFecha(m.fecha_realizada):'—'}</td><td><span className={`badge ${m.estado==='PENDIENTE'?'badge-orange':'badge-green'}`}>{m.estado}</span></td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{m.institucion_nombre||'—'}</td>}{rol!=='Auditor'&&<td><div style={{display:'flex',gap:4}}>
-              <button className="btn btn-purple btn-icon" onClick={()=>setModalReporte(m)} title="Reporte completo de mantenimiento">📋</button>
-              {m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)} title="Finalizar OT">✓</button>}
-              {m.reporte_id&&<span className="badge badge-green" style={{marginLeft:4}} title="Tiene reporte">✓R</span>}
+                <button className="btn btn-purple btn-icon" onClick={()=>setModalReporte(m)} title="Reporte completo de mantenimiento">📋</button>
+                {m.estado==='PENDIENTE'&&<button className="btn btn-primary btn-icon" onClick={()=>setModalFin(m)} title="Finalizar OT">✓</button>}
+                {m.reporte_id&&<span className="badge badge-green" style={{marginLeft:4}} title="Tiene reporte">✓R</span>}
               </div></td>}</tr>))}</tbody></table>}</div>
-              </>)}
+            </>)}
 
             {seccion==='tecnovigilancia' && (<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>{[{label:'Total',valor:tecno.length,cls:'blue'},{label:'Abiertos',valor:tecno.filter(t=>t.estado==='ABIERTO').length,cls:'red'},{label:'En revisión',valor:tecno.filter(t=>t.estado==='EN_REVISION').length,cls:'orange'},{label:'Cerrados',valor:tecno.filter(t=>t.estado==='CERRADO').length,cls:'green'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
