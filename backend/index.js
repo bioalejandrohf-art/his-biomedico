@@ -396,6 +396,32 @@ app.get('/mantenimientos/kpis', authMiddleware, async (req, res) => {
     res.json({ total: parseInt(total.rows[0].count), pendientes: parseInt(pendientes.rows[0].count), realizados: parseInt(realizados.rows[0].count), criticas: parseInt(criticas.rows[0].count), mttr: mttr.rows[0].mttr||0 });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// Reprogramar fecha de OT (drag & drop del calendario)
+app.put('/mantenimientos/:id/reprogramar', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fecha_programada } = req.body;
+    if (!fecha_programada) return res.status(400).json({ error: 'Fecha obligatoria' });
+
+    const m = await pool.query('SELECT * FROM mantenimientos WHERE id=$1', [id]);
+    if (!m.rows.length) return res.status(404).json({ error: 'OT no encontrada' });
+    if (m.rows[0].estado === 'REALIZADO') return res.status(400).json({ error: 'No se puede reprogramar una OT realizada' });
+
+    const fechaAnterior = m.rows[0].fecha_programada;
+    await pool.query('UPDATE mantenimientos SET fecha_programada=$1 WHERE id=$2', [fecha_programada, id]);
+
+    await registrarAuditoria(req, 'REPROGRAMAR', 'MANTENIMIENTO', id);
+    await registrarHistorial(
+      m.rows[0].equipo_id,
+      'REPROGRAMACIÓN',
+      `OT reprogramada del ${new Date(fechaAnterior).toLocaleDateString('es-CO')} al ${new Date(fecha_programada).toLocaleDateString('es-CO')}`,
+      req.user.institucion_id
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/mantenimientos/:id/repuestos', authMiddleware, async (req, res) => {
   const result = await pool.query(
     `SELECT or_.*, r.nombre, r.codigo, r.unidad_medida FROM ot_repuestos or_ JOIN repuestos r ON r.id = or_.repuesto_id WHERE or_.mantenimiento_id = $1`,
