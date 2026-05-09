@@ -33,6 +33,14 @@ const CHART_COLORS = ['#00e5a0','#4da6ff','#ffb347','#ff4d6d','#a78bfa','#34d399
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,229,160,0.6); }
+    50% { box-shadow: 0 0 0 8px rgba(0,229,160,0); }
+  }
   /* ─── PWA & MOBILE RESPONSIVE ─── */
   @media (max-width: 768px) {
     .sidebar { width: 70px !important; }
@@ -788,6 +796,50 @@ export default function App() {
     return null;
   });
   const [instSeleccionada, setInstSeleccionada] = useState(false);
+
+  // ─── PWA INSTALL PROMPT ───
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [appInstalada, setAppInstalada] = useState(false);
+
+  useEffect(() => {
+    // Detectar si la app ya está instalada (en modo standalone)
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      setAppInstalada(true);
+      return;
+    }
+
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    const onInstalled = () => {
+      setAppInstalada(true);
+      setInstallPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', onInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const instalarApp = async () => {
+    if (!installPrompt) {
+      alert('La instalación no está disponible en este navegador. Para instalar:\n\n• Android: Menú ⋮ → "Instalar app" o "Agregar a pantalla principal"\n• iPhone: Botón Compartir → "Agregar a pantalla de inicio"\n• PC: Ícono ⊕ en la barra de direcciones');
+      return;
+    }
+    installPrompt.prompt();
+    const result = await installPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      setAppInstalada(true);
+    }
+    setInstallPrompt(null);
+  };
+
   const setToken = (t) => { if (t) localStorage.setItem('biomed_token',t); else localStorage.removeItem('biomed_token'); setTokenState(t); };
   const logout = () => { localStorage.removeItem('biomed_token'); setTokenState(null); setInstSeleccionada(false); };
 
@@ -1086,6 +1138,42 @@ export default function App() {
       {modalImportar && <ModalImportar token={token} equiposActuales={equipos} onClose={()=>setModalImportar(false)} onSaved={cargarTodo} />}
       {modalProtocolo!==null && <ModalProtocolo protocolo={modalProtocolo||null} tiposEquipo={tiposEquipo} token={token} onClose={()=>setModalProtocolo(null)} onSaved={()=>{cargarTodo();setModalProtocolo(null);}} />}
       {modalReporte && <ModalReporte ot={modalReporte} token={token} onClose={()=>setModalReporte(null)} onSaved={cargarTodo} />}
+      
+      {/* BANNER FLOTANTE PWA */}
+      {!appInstalada && installPrompt && (
+        <div style={{
+          position:'fixed', bottom:14, left:14, right:14,
+          background:G.accent, color:'#0a1520', padding:'12px 16px',
+          borderRadius:8, zIndex:99,
+          boxShadow:'0 8px 24px rgba(0,229,160,0.3)',
+          display:'flex', alignItems:'center', gap:12,
+          animation:'slideUp 0.4s ease-out',
+          maxWidth:480, margin:'0 auto'
+        }}>
+          <div style={{fontSize:24}}>📱</div>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontSize:12, fontWeight:700, letterSpacing:0.5}}>Instala BioMed·HIS</div>
+            <div style={{fontSize:10, opacity:0.85, marginTop:2}}>Acceso rápido como app desde tu pantalla de inicio</div>
+          </div>
+          <button
+            onClick={instalarApp}
+            style={{
+              background:'#0a1520', color:G.accent, border:'none',
+              padding:'8px 14px', borderRadius:6, fontSize:11,
+              fontWeight:700, cursor:'pointer', whiteSpace:'nowrap'
+            }}
+          >Instalar</button>
+          <button
+            onClick={()=>setInstallPrompt(null)}
+            style={{
+              background:'transparent', color:'#0a1520', border:'none',
+              fontSize:18, cursor:'pointer', padding:'0 4px',
+              opacity:0.6
+            }}
+            title="Cerrar"
+          >✕</button>
+        </div>
+      )}
 
       <div className="layout">
         <aside className="sidebar">
@@ -1109,6 +1197,14 @@ export default function App() {
           <div className="sidebar-footer">
             <div style={{fontSize:11,marginBottom:2,color:G.text}}>{user?.nombre||'Usuario'}</div>
             <div className={`rol-badge ${esSuperAdmin?'superadmin-badge':''}`}>{rol}</div>
+            {!appInstalada && installPrompt && (
+              <button
+                className="btn"
+                style={{marginTop:10,width:'100%',justifyContent:'center',fontSize:11,background:G.accent,color:'#0a1520',fontWeight:600,animation:'pulse 2s infinite'}}
+                onClick={instalarApp}
+              >📱 Instalar App
+              </button>
+            )}
             {esSuperAdmin && <button className="btn btn-purple" style={{marginTop:10,width:'100%',justifyContent:'center',fontSize:11}} onClick={()=>setInstSeleccionada(false)}>⇄ Cambiar institución</button>}
             <button className="btn btn-logout" style={{marginTop:8,width:'100%',justifyContent:'center'}} onClick={logout}>↩ Cerrar sesión</button>
           </div>
