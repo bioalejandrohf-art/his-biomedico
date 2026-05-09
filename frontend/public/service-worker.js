@@ -1,64 +1,53 @@
-const CACHE_NAME = 'biomed-his-v1';
+const CACHE_NAME = 'biomed-his-v2';
 
-// Precarga mínima — solo lo esencial
-const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icono-192.png',
-  '/icono-512.png',
-];
-
-// Instalación
+// Auto-actualizar inmediatamente
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(URLS_TO_CACHE).catch(() => {
-        // Si falla algún recurso, no rompe la instalación
-        console.warn('Cache parcial');
-      });
-    })
-  );
   self.skipWaiting();
 });
 
-// Activación: limpiar caches viejos
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(
-        names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))
-      )
-    )
+    Promise.all([
+      // Borrar TODOS los caches viejos
+      caches.keys().then((names) =>
+        Promise.all(names.map((n) => caches.delete(n)))
+      ),
+      // Tomar control inmediatamente
+      self.clients.claim()
+    ])
   );
-  self.clients.claim();
 });
 
-// Estrategia: Network First para API, Cache First para estáticos
+// Estrategia: SIEMPRE intentar red primero, solo usar caché si falla
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // No cachear llamadas a la API (siempre frescas)
+  // No interferir con APIs ni recursos de Cloudinary
   if (url.hostname.includes('railway.app') || url.hostname.includes('cloudinary.com')) {
-    return; // dejar pasar al navegador
+    return;
   }
 
-  // Solo GET
+  // Solo manejar GET
   if (event.request.method !== 'GET') return;
 
+  // Solo manejar mismo origen
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
-        .then((response) => {
-          // Solo cachear respuestas exitosas
-          if (response && response.status === 200 && response.type === 'basic') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match('/index.html'));
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Cachear sólo si la respuesta es exitosa
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => {
+        // Si falla la red, intentar desde caché
+        return caches.match(event.request).then((cached) => {
+          return cached || caches.match('/index.html');
+        });
+      })
   );
 });
