@@ -7,6 +7,7 @@ import ModalImportar from './ModalImportar';
 import ModalReporte from './ModalReporte';
 import Indicadores from './Indicadores';
 import Calendario from './Calendario';
+import Rondas from './Rondas';
 
 const API = 'https://his-biomedico-production.up.railway.app';
 
@@ -1103,6 +1104,7 @@ export default function App() {
     { id:'inventario', icon:'⬡', label:'Inventario' },
     { id:'mantenimiento', icon:'⚙', label:'Mantenimiento' },
     { id:'calendario', icon:'📅', label:'Calendario' },
+    { id:'rondas', icon:'📋', label:'Rondas' },
     { id:'tecnovigilancia', icon:'⚠', label:'Tecnovigilancia' },
     { id:'repuestos', icon:'📦', label:'Repuestos' },
     { id:'historial', icon:'◷', label:'Historial' },
@@ -1119,6 +1121,7 @@ export default function App() {
     protocolos:'Protocolos de Mantenimiento',
     indicadores:'Indicadores de Gestión',
     calendario:'Calendario de Mantenimientos',
+    rondas:'Rondas de Inventario',
   };
   const gravBadge = (g) => g==='GRAVE'?'badge-red':g==='MODERADO'?'badge-orange':'badge-gray';
   const estadoTecnoBadge = (e) => e==='ABIERTO'?'badge-red':e==='EN_REVISION'?'badge-orange':'badge-green';
@@ -1434,7 +1437,9 @@ export default function App() {
             {seccion==='indicadores' && (
               <Indicadores token={token} esSuperAdmin={esSuperAdmin} institucion={user?.institucion_nombre ? {nombre: user.institucion_nombre} : null} />
             )}
-
+            {seccion==='rondas' && (
+              <Rondas token={token} equipos={equipos} rol={rol} />
+            )}
             {seccion==='calendario' && (
               <Calendario
                 token={token}
