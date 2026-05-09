@@ -1236,6 +1236,219 @@ app.get('/indicadores/consolidado', authMiddleware, async (req, res) => {
 });
 
 //////////////////////////////////////////////////
+// 📋 RONDAS DE INVENTARIO
+//////////////////////////////////////////////////
+
+// Listar todas las rondas
+app.get('/rondas', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const q = instId
+      ? `SELECT r.*, u.nombre AS responsable_nombre 
+         FROM rondas_inventario r 
+         LEFT JOIN usuarios u ON u.id = r.responsable_id 
+         WHERE r.institucion_id = $1 
+         ORDER BY r.fecha_inicio DESC`
+      : `SELECT r.*, u.nombre AS responsable_nombre, i.nombre AS institucion_nombre
+         FROM rondas_inventario r 
+         LEFT JOIN usuarios u ON u.id = r.responsable_id 
+         LEFT JOIN instituciones i ON i.id = r.institucion_id
+         ORDER BY r.fecha_inicio DESC`;
+    const result = await pool.query(q, instId ? [instId] : []);
+    res.json(result.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Ver detalle de una ronda específica con todos los ítems
+app.get('/rondas/:id', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r.*, u.nombre AS responsable_nombre, i.nombre AS institucion_nombre, i.logo_url 
+       FROM rondas_inventario r 
+       LEFT JOIN usuarios u ON u.id = r.responsable_id 
+       LEFT JOIN instituciones i ON i.id = r.institucion_id 
+       WHERE r.id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Ronda no encontrada' });
+    
+    const items = await pool.query(
+      `SELECT ri.*, e.nombre AS equipo_nombre, e.marca, e.modelo, e.serie, 
+              e.servicio AS servicio_registrado, e.activo_fijo, e.ubicacion 
+       FROM ronda_items ri 
+       JOIN equipos_biomedicos e ON e.id = ri.equipo_id 
+       WHERE ri.ronda_id = $1 
+       ORDER BY e.servicio, e.nombre`,
+      [req.params.id]
+    );
+    
+    res.json({ ...r.rows[0], items: items.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Iniciar nueva ronda
+app.post('/rondas', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { servicio_filtro, observaciones_generales } = req.body;
+    const instId = req.user.institucion_id || null;
+    
+    // Generar número de ronda automático
+    const ultima = await client.query(
+      `SELECT COUNT(*) AS total FROM rondas_inventario 
+       WHERE institucion_id IS NOT DISTINCT FROM $1 
+       AND EXTRACT(YEAR FROM fecha_inicio) = EXTRACT(YEAR FROM NOW())`,
+      [instId]
+    );
+    const num = parseInt(ultima.rows[0].total) + 1;
+    const numeroRonda = `RND-${new Date().getFullYear()}-${String(num).padStart(4,'0')}`;
+    
+    await client.query('BEGIN');
+    
+    // Crear cabecera de ronda
+    const r = await client.query(
+      `INSERT INTO rondas_inventario 
+       (numero_ronda, servicio_filtro, observaciones_generales, responsable_id, institucion_id) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [numeroRonda, servicio_filtro || null, observaciones_generales || null, req.user.id, instId]
+    );
+    const rondaId = r.rows[0].id;
+    
+    // Cargar equipos al detalle (snapshot del inventario actual)
+    let equiposQ = `SELECT id FROM equipos_biomedicos WHERE estado != 'Baja'`;
+    const params = [];
+    if (instId) {
+      params.push(instId);
+      equiposQ += ` AND institucion_id = $${params.length}`;
+    }
+    if (servicio_filtro) {
+      params.push(servicio_filtro);
+      equiposQ += ` AND servicio = $${params.length}`;
+    }
+    
+    const equipos = await client.query(equiposQ, params);
+    
+    for (const eq of equipos.rows) {
+      await client.query(
+        `INSERT INTO ronda_items (ronda_id, equipo_id, estado) 
+         VALUES ($1, $2, 'PENDIENTE')`,
+        [rondaId, eq.id]
+      );
+    }
+    
+    // Actualizar total de equipos
+    await client.query(
+      'UPDATE rondas_inventario SET total_equipos = $1 WHERE id = $2',
+      [equipos.rows.length, rondaId]
+    );
+    
+    await client.query('COMMIT');
+    await registrarAuditoria(req, 'CREAR', 'RONDA', rondaId);
+    
+    res.json({ ...r.rows[0], total_equipos: equipos.rows.length });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+// Actualizar el estado de un ítem de la ronda
+app.put('/rondas/:rondaId/item/:equipoId', authMiddleware, async (req, res) => {
+  try {
+    const { rondaId, equipoId } = req.params;
+    const { estado, servicio_real, observaciones } = req.body;
+    
+    if (!['PRESENTE', 'NO_ENCONTRADO', 'CON_OBSERVACION', 'PENDIENTE'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    
+    await pool.query(
+      `UPDATE ronda_items 
+       SET estado = $1, servicio_real = $2, observaciones = $3, fecha_chequeo = NOW() 
+       WHERE ronda_id = $4 AND equipo_id = $5`,
+      [estado, servicio_real || null, observaciones || null, rondaId, equipoId]
+    );
+    
+    // Recalcular contadores de la ronda
+    const stats = await pool.query(
+      `SELECT 
+        SUM(CASE WHEN estado='PRESENTE' THEN 1 ELSE 0 END) AS presentes,
+        SUM(CASE WHEN estado='NO_ENCONTRADO' THEN 1 ELSE 0 END) AS no_encontrados,
+        SUM(CASE WHEN estado='CON_OBSERVACION' THEN 1 ELSE 0 END) AS con_observacion,
+        COUNT(*) AS total
+       FROM ronda_items WHERE ronda_id = $1`,
+      [rondaId]
+    );
+    
+    const s = stats.rows[0];
+    const chequeados = parseInt(s.presentes) + parseInt(s.no_encontrados) + parseInt(s.con_observacion);
+    const pct = s.total > 0 ? Math.round((chequeados / s.total) * 1000) / 10 : 0;
+    
+    await pool.query(
+      `UPDATE rondas_inventario 
+       SET presentes = $1, no_encontrados = $2, con_observacion = $3, porcentaje_cumplimiento = $4 
+       WHERE id = $5`,
+      [s.presentes, s.no_encontrados, s.con_observacion, pct, rondaId]
+    );
+    
+    res.json({ ok: true, stats: s });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Finalizar ronda
+app.put('/rondas/:id/finalizar', authMiddleware, async (req, res) => {
+  try {
+    const { observaciones_generales } = req.body;
+    await pool.query(
+      `UPDATE rondas_inventario 
+       SET estado = 'FINALIZADA', fecha_fin = NOW(), observaciones_generales = COALESCE($1, observaciones_generales) 
+       WHERE id = $2`,
+      [observaciones_generales || null, req.params.id]
+    );
+    await registrarAuditoria(req, 'FINALIZAR', 'RONDA', req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Eliminar ronda (solo Admin/SuperAdmin y solo si está en progreso)
+app.delete('/rondas/:id', authMiddleware, soloAdmin, async (req, res) => {
+  try {
+    await registrarAuditoria(req, 'ELIMINAR', 'RONDA', req.params.id);
+    await pool.query('DELETE FROM rondas_inventario WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// KPIs de rondas
+app.get('/rondas/kpis/general', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const w = instId ? 'WHERE institucion_id = $1' : '';
+    const p = instId ? [instId] : [];
+    
+    const total = await pool.query(`SELECT COUNT(*) FROM rondas_inventario ${w}`, p);
+    const enProgreso = await pool.query(
+      `SELECT COUNT(*) FROM rondas_inventario WHERE estado='EN_PROGRESO'${instId?' AND institucion_id=$1':''}`, p
+    );
+    const finalizadas = await pool.query(
+      `SELECT COUNT(*) FROM rondas_inventario WHERE estado='FINALIZADA'${instId?' AND institucion_id=$1':''}`, p
+    );
+    const promCumplimiento = await pool.query(
+      `SELECT COALESCE(AVG(porcentaje_cumplimiento), 0) AS prom 
+       FROM rondas_inventario 
+       WHERE estado='FINALIZADA'${instId?' AND institucion_id=$1':''}`, p
+    );
+    
+    res.json({
+      total: parseInt(total.rows[0].count),
+      enProgreso: parseInt(enProgreso.rows[0].count),
+      finalizadas: parseInt(finalizadas.rows[0].count),
+      promedioCumplimiento: parseFloat(promCumplimiento.rows[0].prom)
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+//////////////////////////////////////////////////
 // 📜 HISTORIAL
 //////////////////////////////////////////////////
 app.get('/historial/:equipo_id', authMiddleware, async (req, res) => {
