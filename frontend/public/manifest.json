@@ -6,14 +6,26 @@
     {
       "src": "icono-192.png",
       "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
+      "sizes": "192x192"
+    },
+    {
+      "src": "icono-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "icono-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "form_factor": "wide"
     },
     {
       "src": "icono-512.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "form_factor": "narrow"
     }
   ],
   "start_url": ".",
@@ -21,7 +33,6 @@
   "theme_color": "#0f1623",
   "background_color": "#0f1623",
   "orientation": "any",
-  "categories": ["medical", "productivity", "business"],
   "lang": "es",
   "scope": "/"
 }
