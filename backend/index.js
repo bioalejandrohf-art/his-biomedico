@@ -328,11 +328,18 @@ app.delete('/protocolos/:id', authMiddleware, soloSuperAdmin, async (req, res) =
 //////////////////////////////////////////////////
 app.post('/mantenimientos', authMiddleware, async (req, res) => {
   try {
-    const { equipo_id, tipo, descripcion, fecha_programada, prioridad } = req.body;
+    const { equipo_id, tipo, descripcion, fecha_programada, prioridad,
+            proveedor_id, contrato_id, tercerizada, costo_servicio,
+            factura_numero, factura_fecha, estado_servicio } = req.body;
     const instId = req.user.institucion_id || null;
     const result = await pool.query(
-      `INSERT INTO mantenimientos (equipo_id,tipo,descripcion,fecha_programada,estado,prioridad,institucion_id) VALUES ($1,$2,$3,$4,'PENDIENTE',$5,$6) RETURNING *`,
-      [equipo_id, tipo, descripcion, fecha_programada, prioridad||'NORMAL', instId]
+      `INSERT INTO mantenimientos 
+       (equipo_id,tipo,descripcion,fecha_programada,estado,prioridad,institucion_id,
+        proveedor_id,contrato_id,tercerizada,costo_servicio,factura_numero,factura_fecha,estado_servicio)
+       VALUES ($1,$2,$3,$4,'PENDIENTE',$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [equipo_id, tipo, descripcion, fecha_programada, prioridad||'NORMAL', instId,
+       proveedor_id||null, contrato_id||null, !!tercerizada, costo_servicio||0,
+       factura_numero||null, factura_fecha||null, estado_servicio||null]
     );
     await registrarAuditoria(req,'CREAR','MANTENIMIENTO',result.rows[0].id);
     await registrarHistorial(equipo_id,'MANTENIMIENTO',`OT creada: ${tipo}`,instId);
@@ -343,12 +350,25 @@ app.get('/mantenimientos', authMiddleware, async (req, res) => {
   const instId = filtroInstitucion(req);
   const q = instId
     ? `SELECT m.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,e.tipo_equipo,
+       p.razon_social AS proveedor_nombre,
+       c.numero_contrato AS contrato_numero,
        (SELECT id FROM reportes_mantenimiento WHERE mantenimiento_id=m.id LIMIT 1) AS reporte_id
-       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id WHERE m.institucion_id=$1
+       FROM mantenimientos m 
+       JOIN equipos_biomedicos e ON e.id=m.equipo_id 
+       LEFT JOIN proveedores p ON p.id = m.proveedor_id
+       LEFT JOIN contratos c ON c.id = m.contrato_id
+       WHERE m.institucion_id=$1
        ORDER BY CASE m.prioridad WHEN 'CRITICA' THEN 1 WHEN 'ALTA' THEN 2 ELSE 3 END, m.fecha_programada`
-    : `SELECT m.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,e.tipo_equipo,i.nombre AS institucion_nombre,
+    : `SELECT m.*,e.nombre AS equipo_nombre,e.servicio AS equipo_servicio,e.tipo_equipo,
+       i.nombre AS institucion_nombre,
+       p.razon_social AS proveedor_nombre,
+       c.numero_contrato AS contrato_numero,
        (SELECT id FROM reportes_mantenimiento WHERE mantenimiento_id=m.id LIMIT 1) AS reporte_id
-       FROM mantenimientos m JOIN equipos_biomedicos e ON e.id=m.equipo_id LEFT JOIN instituciones i ON i.id=m.institucion_id
+       FROM mantenimientos m 
+       JOIN equipos_biomedicos e ON e.id=m.equipo_id 
+       LEFT JOIN instituciones i ON i.id=m.institucion_id
+       LEFT JOIN proveedores p ON p.id = m.proveedor_id
+       LEFT JOIN contratos c ON c.id = m.contrato_id
        ORDER BY i.nombre, m.fecha_programada`;
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
@@ -1232,6 +1252,291 @@ app.get('/indicadores/consolidado', authMiddleware, async (req, res) => {
       dias,
       endpoints: ['cumplimiento','disponibilidad','productividad','costos','tecnovigilancia','envejecimiento','alertas-predictivas']
     });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+//////////////////////////////////////////////////
+// 🏢 PROVEEDORES
+//////////////////////////////////////////////////
+
+// Listar proveedores con filtros y stats
+app.get('/proveedores', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const q = instId
+      ? `SELECT p.*,
+         (SELECT COUNT(*) FROM contratos c WHERE c.proveedor_id = p.id AND c.estado = 'VIGENTE') AS contratos_vigentes,
+         (SELECT COUNT(*) FROM mantenimientos m WHERE m.proveedor_id = p.id) AS ots_realizadas
+         FROM proveedores p WHERE p.institucion_id = $1
+         ORDER BY p.razon_social`
+      : `SELECT p.*, i.nombre AS institucion_nombre,
+         (SELECT COUNT(*) FROM contratos c WHERE c.proveedor_id = p.id AND c.estado = 'VIGENTE') AS contratos_vigentes,
+         (SELECT COUNT(*) FROM mantenimientos m WHERE m.proveedor_id = p.id) AS ots_realizadas
+         FROM proveedores p
+         LEFT JOIN instituciones i ON i.id = p.institucion_id
+         ORDER BY i.nombre, p.razon_social`;
+    const result = await pool.query(q, instId ? [instId] : []);
+    res.json(result.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Detalle de un proveedor
+app.get('/proveedores/:id', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT p.*, u.nombre AS creador_nombre, i.nombre AS institucion_nombre
+       FROM proveedores p
+       LEFT JOIN usuarios u ON u.id = p.creado_por
+       LEFT JOIN instituciones i ON i.id = p.institucion_id
+       WHERE p.id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json(r.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Crear proveedor
+app.post('/proveedores', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
+    const d = req.body;
+    const instId = req.user.institucion_id || null;
+    const result = await pool.query(
+      `INSERT INTO proveedores 
+       (razon_social,nit,tipo,contacto_nombre,contacto_cargo,telefono,celular,email,direccion,ciudad,pais,sitio_web,especialidades,certificaciones,observaciones,estado,institucion_id,creado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      [d.razon_social, d.nit||null, d.tipo||null, d.contacto_nombre||null, d.contacto_cargo||null,
+       d.telefono||null, d.celular||null, d.email||null, d.direccion||null, d.ciudad||null,
+       d.pais||'Colombia', d.sitio_web||null, d.especialidades||null, d.certificaciones||null,
+       d.observaciones||null, d.estado||'ACTIVO', instId, req.user.id]
+    );
+    await registrarAuditoria(req,'CREAR','PROVEEDORES',result.rows[0].id);
+    res.json(result.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Actualizar proveedor
+app.put('/proveedores/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
+    const { id } = req.params;
+    const d = req.body;
+    await pool.query(
+      `UPDATE proveedores SET 
+       razon_social=$1,nit=$2,tipo=$3,contacto_nombre=$4,contacto_cargo=$5,
+       telefono=$6,celular=$7,email=$8,direccion=$9,ciudad=$10,pais=$11,
+       sitio_web=$12,especialidades=$13,certificaciones=$14,observaciones=$15,
+       estado=$16,updated_at=NOW() WHERE id=$17`,
+      [d.razon_social, d.nit||null, d.tipo||null, d.contacto_nombre||null, d.contacto_cargo||null,
+       d.telefono||null, d.celular||null, d.email||null, d.direccion||null, d.ciudad||null,
+       d.pais||'Colombia', d.sitio_web||null, d.especialidades||null, d.certificaciones||null,
+       d.observaciones||null, d.estado||'ACTIVO', id]
+    );
+    await registrarAuditoria(req,'EDITAR','PROVEEDORES',id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Eliminar proveedor
+app.delete('/proveedores/:id', authMiddleware, soloAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Verificar que no tenga contratos ni OTs asociadas
+    const cont = await pool.query('SELECT COUNT(*) FROM contratos WHERE proveedor_id=$1',[id]);
+    const ots = await pool.query('SELECT COUNT(*) FROM mantenimientos WHERE proveedor_id=$1',[id]);
+    if (parseInt(cont.rows[0].count) > 0 || parseInt(ots.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar: tiene contratos u OTs asociados. Cámbialo a estado INACTIVO.' });
+    }
+    await registrarAuditoria(req,'ELIMINAR','PROVEEDORES',id);
+    await pool.query('DELETE FROM proveedores WHERE id=$1',[id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// KPIs proveedores
+app.get('/proveedores/kpis/general', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const w = instId ? 'WHERE institucion_id=$1' : '';
+    const p = instId ? [instId] : [];
+    const total = await pool.query(`SELECT COUNT(*) FROM proveedores ${w}`, p);
+    const activos = await pool.query(`SELECT COUNT(*) FROM proveedores WHERE estado='ACTIVO'${instId?' AND institucion_id=$1':''}`, p);
+    const inactivos = await pool.query(`SELECT COUNT(*) FROM proveedores WHERE estado='INACTIVO'${instId?' AND institucion_id=$1':''}`, p);
+    const porTipo = await pool.query(`SELECT COALESCE(tipo,'Sin tipo') AS tipo, COUNT(*) AS total FROM proveedores ${w} GROUP BY tipo ORDER BY total DESC LIMIT 8`, p);
+    res.json({
+      total: parseInt(total.rows[0].count),
+      activos: parseInt(activos.rows[0].count),
+      inactivos: parseInt(inactivos.rows[0].count),
+      porTipo: porTipo.rows
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+//////////////////////////////////////////////////
+// 📄 CONTRATOS
+//////////////////////////////////////////////////
+
+// Listar contratos
+app.get('/contratos', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const q = instId
+      ? `SELECT c.*, p.razon_social AS proveedor_nombre, p.nit AS proveedor_nit,
+         CASE 
+           WHEN c.fecha_fin < NOW() THEN 'VENCIDO'
+           WHEN c.fecha_fin < NOW() + INTERVAL '1 day' * COALESCE(c.alerta_vencimiento_dias, 30) THEN 'POR_VENCER'
+           ELSE c.estado
+         END AS estado_calculado,
+         (SELECT COUNT(*) FROM mantenimientos m WHERE m.contrato_id = c.id) AS ots_asociadas
+         FROM contratos c
+         JOIN proveedores p ON p.id = c.proveedor_id
+         WHERE c.institucion_id = $1
+         ORDER BY c.fecha_fin DESC NULLS LAST`
+      : `SELECT c.*, p.razon_social AS proveedor_nombre, p.nit AS proveedor_nit,
+         i.nombre AS institucion_nombre,
+         CASE 
+           WHEN c.fecha_fin < NOW() THEN 'VENCIDO'
+           WHEN c.fecha_fin < NOW() + INTERVAL '1 day' * COALESCE(c.alerta_vencimiento_dias, 30) THEN 'POR_VENCER'
+           ELSE c.estado
+         END AS estado_calculado,
+         (SELECT COUNT(*) FROM mantenimientos m WHERE m.contrato_id = c.id) AS ots_asociadas
+         FROM contratos c
+         JOIN proveedores p ON p.id = c.proveedor_id
+         LEFT JOIN instituciones i ON i.id = c.institucion_id
+         ORDER BY i.nombre, c.fecha_fin DESC NULLS LAST`;
+    const result = await pool.query(q, instId ? [instId] : []);
+    res.json(result.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Detalle de un contrato
+app.get('/contratos/:id', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT c.*, p.razon_social AS proveedor_nombre, p.nit AS proveedor_nit, p.email AS proveedor_email
+       FROM contratos c
+       JOIN proveedores p ON p.id = c.proveedor_id
+       WHERE c.id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json(r.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Crear contrato
+app.post('/contratos', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
+    const d = req.body;
+    if (!d.numero_contrato || !d.proveedor_id) return res.status(400).json({ error: 'Número y proveedor obligatorios' });
+    const instId = req.user.institucion_id || null;
+    const result = await pool.query(
+      `INSERT INTO contratos
+       (numero_contrato,proveedor_id,objeto,tipo,fecha_inicio,fecha_fin,valor,forma_pago,
+        estado,responsable_cliente,responsable_proveedor,documento_url,observaciones,
+        alerta_vencimiento_dias,institucion_id,creado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [d.numero_contrato, d.proveedor_id, d.objeto||null, d.tipo||null,
+       d.fecha_inicio||null, d.fecha_fin||null, d.valor||0, d.forma_pago||null,
+       d.estado||'VIGENTE', d.responsable_cliente||null, d.responsable_proveedor||null,
+       d.documento_url||null, d.observaciones||null, d.alerta_vencimiento_dias||30,
+       instId, req.user.id]
+    );
+    await registrarAuditoria(req,'CREAR','CONTRATOS',result.rows[0].id);
+    res.json(result.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Actualizar contrato
+app.put('/contratos/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
+    const { id } = req.params;
+    const d = req.body;
+    await pool.query(
+      `UPDATE contratos SET
+       numero_contrato=$1,proveedor_id=$2,objeto=$3,tipo=$4,fecha_inicio=$5,fecha_fin=$6,
+       valor=$7,forma_pago=$8,estado=$9,responsable_cliente=$10,responsable_proveedor=$11,
+       documento_url=$12,observaciones=$13,alerta_vencimiento_dias=$14,updated_at=NOW()
+       WHERE id=$15`,
+      [d.numero_contrato, d.proveedor_id, d.objeto||null, d.tipo||null,
+       d.fecha_inicio||null, d.fecha_fin||null, d.valor||0, d.forma_pago||null,
+       d.estado||'VIGENTE', d.responsable_cliente||null, d.responsable_proveedor||null,
+       d.documento_url||null, d.observaciones||null, d.alerta_vencimiento_dias||30, id]
+    );
+    await registrarAuditoria(req,'EDITAR','CONTRATOS',id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Eliminar contrato
+app.delete('/contratos/:id', authMiddleware, soloAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ots = await pool.query('SELECT COUNT(*) FROM mantenimientos WHERE contrato_id=$1',[id]);
+    if (parseInt(ots.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar: tiene OTs asociadas' });
+    }
+    await registrarAuditoria(req,'ELIMINAR','CONTRATOS',id);
+    await pool.query('DELETE FROM contratos WHERE id=$1',[id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// KPIs contratos
+app.get('/contratos/kpis/general', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const w = instId ? 'WHERE institucion_id=$1' : '';
+    const p = instId ? [instId] : [];
+    
+    const total = await pool.query(`SELECT COUNT(*) FROM contratos ${w}`, p);
+    const vigentes = await pool.query(
+      `SELECT COUNT(*) FROM contratos 
+       WHERE estado='VIGENTE' AND (fecha_fin IS NULL OR fecha_fin >= NOW())
+       ${instId?'AND institucion_id=$1':''}`, p);
+    const porVencer = await pool.query(
+      `SELECT COUNT(*) FROM contratos
+       WHERE estado='VIGENTE' AND fecha_fin IS NOT NULL
+       AND fecha_fin BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+       ${instId?'AND institucion_id=$1':''}`, p);
+    const vencidos = await pool.query(
+      `SELECT COUNT(*) FROM contratos 
+       WHERE fecha_fin < NOW() ${instId?'AND institucion_id=$1':''}`, p);
+    const valorTotal = await pool.query(
+      `SELECT COALESCE(SUM(valor),0) AS total FROM contratos 
+       WHERE estado='VIGENTE' ${instId?'AND institucion_id=$1':''}`, p);
+    
+    res.json({
+      total: parseInt(total.rows[0].count),
+      vigentes: parseInt(vigentes.rows[0].count),
+      porVencer: parseInt(porVencer.rows[0].count),
+      vencidos: parseInt(vencidos.rows[0].count),
+      valorTotal: parseFloat(valorTotal.rows[0].total)
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Alertas: contratos por vencer (próximos 60 días)
+app.get('/contratos/alertas/vencimiento', authMiddleware, async (req, res) => {
+  try {
+    const instId = filtroInstitucion(req);
+    const r = await pool.query(
+      `SELECT c.id, c.numero_contrato, c.fecha_fin, c.objeto, c.valor,
+       p.razon_social AS proveedor_nombre,
+       EXTRACT(DAY FROM AGE(c.fecha_fin, NOW())) AS dias_restantes
+       FROM contratos c
+       JOIN proveedores p ON p.id = c.proveedor_id
+       WHERE c.estado = 'VIGENTE'
+       AND c.fecha_fin IS NOT NULL
+       AND c.fecha_fin BETWEEN NOW() - INTERVAL '7 days' AND NOW() + INTERVAL '60 days'
+       ${instId ? 'AND c.institucion_id=$1' : ''}
+       ORDER BY c.fecha_fin ASC`,
+      instId ? [instId] : []
+    );
+    res.json(r.rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
