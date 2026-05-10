@@ -8,6 +8,8 @@ import ModalReporte from './ModalReporte';
 import Indicadores from './Indicadores';
 import Calendario from './Calendario';
 import Rondas from './Rondas';
+import Proveedores from './Proveedores';
+import Contratos from './Contratos';
 
 const API = 'https://his-biomedico-production.up.railway.app';
 
@@ -1105,6 +1107,8 @@ export default function App() {
     { id:'mantenimiento', icon:'⚙', label:'Mantenimiento' },
     { id:'calendario', icon:'📅', label:'Calendario' },
     { id:'rondas', icon:'📋', label:'Rondas' },
+    { id:'proveedores', icon:'🏢', label:'Proveedores' },
+    { id:'contratos', icon:'📄', label:'Contratos' },
     { id:'tecnovigilancia', icon:'⚠', label:'Tecnovigilancia' },
     { id:'repuestos', icon:'📦', label:'Repuestos' },
     { id:'historial', icon:'◷', label:'Historial' },
@@ -1122,6 +1126,8 @@ export default function App() {
     indicadores:'Indicadores de Gestión',
     calendario:'Calendario de Mantenimientos',
     rondas:'Rondas de Inventario',
+    proveedores:'Proveedores Externos',
+    contratos:'Contratos con Proveedores',
   };
   const gravBadge = (g) => g==='GRAVE'?'badge-red':g==='MODERADO'?'badge-orange':'badge-gray';
   const estadoTecnoBadge = (e) => e==='ABIERTO'?'badge-red':e==='EN_REVISION'?'badge-orange':'badge-green';
@@ -1439,6 +1445,12 @@ export default function App() {
             )}
             {seccion==='rondas' && (
               <Rondas token={token} equipos={equipos} rol={rol} />
+            )}
+            {seccion==='proveedores' && (
+              <Proveedores token={token} rol={rol} esSuperAdmin={esSuperAdmin} />
+            )}
+            {seccion==='contratos' && (
+              <Contratos token={token} rol={rol} esSuperAdmin={esSuperAdmin} />
             )}
             {seccion==='calendario' && (
               <Calendario
