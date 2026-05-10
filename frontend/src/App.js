@@ -50,9 +50,17 @@ const css = `
     .sidebar-logo { padding: 16px 8px !important; text-align: center; }
     .logo-mark { font-size: 9px !important; letter-spacing: 1px !important; }
     .logo-sub, .inst-badge { display: none !important; }
-    .nav-item { padding: 12px 8px !important; justify-content: center; font-size: 0 !important; }
-    .nav-icon { font-size: 22px !important; width: auto !important; }
+    .nav-item { padding: 10px 8px !important; justify-content: center; font-size: 0 !important; }
+    .nav-item .nav-icon { font-size: 20px !important; width: auto !important; }
     .nav-label { display: none !important; }
+    /* En móvil ocultar headers de grupos para ahorrar espacio */
+    .nav-section > div > div:first-child:not(.nav-item) { 
+      padding: 4px 0 !important; 
+      font-size: 0 !important;
+      border-left: none !important;
+    }
+    .nav-section > div > div:first-child:not(.nav-item) > span:nth-child(1) { font-size: 14px !important; }
+    .nav-section > div > div:first-child:not(.nav-item) > span:not(:first-child) { display: none !important; }
     .sidebar-footer { padding: 10px 6px !important; text-align: center; font-size: 9px !important; }
     .sidebar-footer button { padding: 4px !important; font-size: 9px !important; }
     .main { margin-left: 70px !important; }
@@ -847,6 +855,20 @@ export default function App() {
   const logout = () => { localStorage.removeItem('biomed_token'); setTokenState(null); setInstSeleccionada(false); };
 
   const [seccion, setSeccion] = useState('dashboard');
+  // Estado de grupos del sidebar (qué grupos están expandidos)
+  const [gruposAbiertos, setGruposAbiertos] = useState(() => {
+    const saved = localStorage.getItem('biomed_grupos');
+    if (saved) try { return JSON.parse(saved); } catch {}
+    return { operacion: true, activos: true, servicio: true, proveedores: false, admin: false };
+  });
+
+  const toggleGrupo = (id) => {
+    setGruposAbiertos(g => {
+      const nuevo = { ...g, [id]: !g[id] };
+      localStorage.setItem('biomed_grupos', JSON.stringify(nuevo));
+      return nuevo;
+    });
+  };
   const [equipos, setEquipos] = useState([]);
   const [mantenimientos, setMantenimientos] = useState([]);
   const [tecno, setTecno] = useState([]);
@@ -1101,22 +1123,57 @@ export default function App() {
     return <><style>{css}</style><SelectorInstitucion token={token} onSeleccionar={(t)=>{setToken(t);setInstSeleccionada(true);}} /></>;
   }
 
-  const navItems = [
-    { id:'dashboard', icon:'◈', label:'Dashboard' },
-    { id:'inventario', icon:'⬡', label:'Inventario' },
-    { id:'mantenimiento', icon:'⚙', label:'Mantenimiento' },
-    { id:'calendario', icon:'📅', label:'Calendario' },
-    { id:'rondas', icon:'📋', label:'Rondas' },
-    { id:'proveedores', icon:'🏢', label:'Proveedores' },
-    { id:'contratos', icon:'📄', label:'Contratos' },
-    { id:'tecnovigilancia', icon:'⚠', label:'Tecnovigilancia' },
-    { id:'repuestos', icon:'📦', label:'Repuestos' },
-    { id:'historial', icon:'◷', label:'Historial' },
-    ...(['Admin','SuperAdmin'].includes(rol) ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
-    { id:'indicadores', icon:'📊', label:'Indicadores' },
-    ...(esSuperAdmin ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
-    ...(esSuperAdmin ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
-  ];
+  const navGroups = [
+    {
+      id:'operacion',
+      label:'Operación',
+      icon:'📊',
+      items:[
+        { id:'dashboard', icon:'◈', label:'Dashboard' },
+        { id:'indicadores', icon:'📊', label:'Indicadores' },
+        { id:'calendario', icon:'📅', label:'Calendario' },
+      ]
+    },
+    {
+      id:'activos',
+      label:'Activos biomédicos',
+      icon:'📦',
+      items:[
+        { id:'inventario', icon:'⬡', label:'Inventario' },
+        { id:'historial', icon:'◷', label:'Historial' },
+        { id:'rondas', icon:'📋', label:'Rondas' },
+      ]
+    },
+    {
+      id:'servicio',
+      label:'Servicio técnico',
+      icon:'🔧',
+      items:[
+        { id:'mantenimiento', icon:'⚙', label:'Mantenimiento' },
+        { id:'tecnovigilancia', icon:'⚠', label:'Tecnovigilancia' },
+        { id:'repuestos', icon:'📦', label:'Repuestos' },
+        ...(esSuperAdmin ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
+      ]
+    },
+    {
+      id:'proveedores',
+      label:'Proveedores',
+      icon:'🏢',
+      items:[
+        { id:'proveedores', icon:'🏢', label:'Proveedores' },
+        { id:'contratos', icon:'📄', label:'Contratos' },
+      ]
+    },
+    {
+      id:'admin',
+      label:'Administración',
+      icon:'⚙',
+      items:[
+        ...(['Admin','SuperAdmin'].includes(rol) ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
+        ...(esSuperAdmin ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
+      ].filter(Boolean)
+    },
+  ].filter(g => g.items.length > 0);
   const titulos = {
     dashboard:'Dashboard Ejecutivo', inventario:'Inventario de Equipos',
     mantenimiento:'Módulo de Mantenimiento', tecnovigilancia:'Tecnovigilancia',
@@ -1193,15 +1250,58 @@ export default function App() {
             {esSuperAdmin && !user?.institucion_nombre && <div className="inst-badge" style={{color:'#a78bfa',borderColor:'rgba(167,139,250,0.3)'}}>◈ Todas las instituciones</div>}
           </div>
           <nav className="nav-section">
-            <div className="nav-label">Módulos</div>
-            {navItems.map(n=>(
-              <div key={n.id} className={`nav-item ${seccion===n.id?'active':''}`} onClick={()=>setSeccion(n.id)}>
-                <span className="nav-icon">{n.icon}</span>{n.label}
-                {n.id==='mantenimiento'&&alertas.length>0&&<span style={{marginLeft:'auto',background:G.danger,color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{alertas.length}</span>}
-                {n.id==='tecnovigilancia'&&tecno.filter(t=>t.estado==='ABIERTO').length>0&&<span style={{marginLeft:'auto',background:'#f4a261',color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{tecno.filter(t=>t.estado==='ABIERTO').length}</span>}
-                {n.id==='repuestos'&&repStockBajo.length>0&&<span style={{marginLeft:'auto',background:G.warning,color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{repStockBajo.length}</span>}
-              </div>
-            ))}
+            {navGroups.map(grupo => {
+              const abierto = gruposAbiertos[grupo.id];
+              // Calcular badges de alerta del grupo
+              const alertasGrupo = (() => {
+                let total = 0;
+                if (grupo.items.some(i=>i.id==='mantenimiento')) total += alertas.length;
+                if (grupo.items.some(i=>i.id==='tecnovigilancia')) total += tecno.filter(t=>t.estado==='ABIERTO').length;
+                if (grupo.items.some(i=>i.id==='repuestos')) total += repStockBajo.length;
+                return total;
+              })();
+              return (
+                <div key={grupo.id} style={{marginBottom:2}}>
+                  <div
+                    onClick={() => toggleGrupo(grupo.id)}
+                    style={{
+                      display:'flex', alignItems:'center', gap:8,
+                      padding:'10px 16px',
+                      cursor:'pointer',
+                      fontSize:10, fontWeight:700, letterSpacing:1.5,
+                      textTransform:'uppercase',
+                      color: abierto ? G.accent : G.textMuted,
+                      borderLeft: abierto ? `3px solid ${G.accent}` : '3px solid transparent',
+                      background: abierto ? 'rgba(0,229,160,0.04)' : 'transparent',
+                      transition: 'all 0.15s',
+                      userSelect: 'none'
+                    }}
+                  >
+                    <span style={{fontSize:14}}>{grupo.icon}</span>
+                    <span style={{flex:1}}>{grupo.label}</span>
+                    {!abierto && alertasGrupo > 0 && (
+                      <span style={{background:G.danger,color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:9,fontWeight:700}}>
+                        {alertasGrupo}
+                      </span>
+                    )}
+                    <span style={{fontSize:10,opacity:0.6,transform:`rotate(${abierto?90:0}deg)`,transition:'transform 0.2s'}}>▶</span>
+                  </div>
+                  {abierto && grupo.items.map(n => (
+                    <div
+                      key={n.id}
+                      className={`nav-item ${seccion===n.id?'active':''}`}
+                      onClick={()=>setSeccion(n.id)}
+                      style={{paddingLeft:34}}
+                    >
+                      <span className="nav-icon">{n.icon}</span>{n.label}
+                      {n.id==='mantenimiento'&&alertas.length>0&&<span style={{marginLeft:'auto',background:G.danger,color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{alertas.length}</span>}
+                      {n.id==='tecnovigilancia'&&tecno.filter(t=>t.estado==='ABIERTO').length>0&&<span style={{marginLeft:'auto',background:'#f4a261',color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{tecno.filter(t=>t.estado==='ABIERTO').length}</span>}
+                      {n.id==='repuestos'&&repStockBajo.length>0&&<span style={{marginLeft:'auto',background:G.warning,color:'#fff',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{repStockBajo.length}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </nav>
           <div className="sidebar-footer">
             <div style={{fontSize:11,marginBottom:2,color:G.text}}>{user?.nombre||'Usuario'}</div>
