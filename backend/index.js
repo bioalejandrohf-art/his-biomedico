@@ -56,9 +56,18 @@ const registrarHistorial = async (equipo_id, accion, descripcion, institucion_id
 //////////////////////////////////////////////////
 // 🏥 INSTITUCIONES
 //////////////////////////////////////////////////
-app.get('/instituciones', authMiddleware, soloSuperAdmin, async (req, res) => {
-  const result = await pool.query('SELECT * FROM instituciones ORDER BY nombre');
-  res.json(result.rows);
+app.get('/instituciones', authMiddleware, async (req, res) => {
+  // SuperAdmin ve todas, Admin solo ve la suya, Auditor también
+  if (req.user.rol === 'SuperAdmin') {
+    const result = await pool.query('SELECT * FROM instituciones ORDER BY nombre');
+    return res.json(result.rows);
+  }
+  if (['Admin','Auditor'].includes(req.user.rol)) {
+    if (!req.user.institucion_id) return res.json([]);
+    const result = await pool.query('SELECT * FROM instituciones WHERE id=$1', [req.user.institucion_id]);
+    return res.json(result.rows);
+  }
+  return res.status(403).json({ error: 'Sin permisos' });
 });
 app.get('/instituciones/mia', authMiddleware, async (req, res) => {
   if (!req.user.institucion_id) return res.json(null);
@@ -145,7 +154,7 @@ app.post('/login', async (req, res) => {
 //////////////////////////////////////////////////
 // 👥 USUARIOS
 //////////////////////////////////////////////////
-app.get('/usuarios', authMiddleware, soloAdmin, async (req, res) => {
+app.get('/usuarios', authMiddleware, soloSuperAdmin, async (req, res) => {
   const instId = filtroInstitucion(req);
   const q = instId
     ? `SELECT id,nombre,email,rol,institucion_id,creado_en FROM usuarios WHERE institucion_id=$1 ORDER BY creado_en DESC`
@@ -153,7 +162,7 @@ app.get('/usuarios', authMiddleware, soloAdmin, async (req, res) => {
   const result = await pool.query(q, instId ? [instId] : []);
   res.json(result.rows);
 });
-app.put('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
+app.put('/usuarios/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, email, rol, password, institucion_id } = req.body;
@@ -166,7 +175,7 @@ app.put('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-app.delete('/usuarios/:id', authMiddleware, soloAdmin, async (req, res) => {
+app.delete('/usuarios/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     if (parseInt(req.params.id)===req.user.id) return res.status(400).json({ error: 'No puedes eliminarte' });
     await pool.query('DELETE FROM usuarios WHERE id=$1', [req.params.id]);
@@ -232,7 +241,7 @@ app.get('/tipos-equipo', authMiddleware, async (req, res) => {
   const result = await pool.query('SELECT * FROM tipos_equipo ORDER BY nombre');
   res.json(result.rows);
 });
-app.post('/tipos-equipo', authMiddleware, soloSuperAdmin, async (req, res) => {
+app.post('/tipos-equipo', authMiddleware, soloAdmin, async (req, res) => {
   try {
     const { nombre, descripcion } = req.body;
     const result = await pool.query('INSERT INTO tipos_equipo (nombre,descripcion) VALUES ($1,$2) RETURNING *',[nombre,descripcion||null]);
@@ -242,7 +251,7 @@ app.post('/tipos-equipo', authMiddleware, soloSuperAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.delete('/tipos-equipo/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
+app.delete('/tipos-equipo/:id', authMiddleware, soloAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM tipos_equipo WHERE id=$1',[req.params.id]);
     res.json({ ok: true });
@@ -266,7 +275,7 @@ app.get('/protocolos/:id', authMiddleware, async (req, res) => {
   const items = await pool.query('SELECT * FROM protocolo_items WHERE protocolo_id=$1 ORDER BY orden, id',[req.params.id]);
   res.json({ ...p.rows[0], items: items.rows });
 });
-app.post('/protocolos', authMiddleware, soloSuperAdmin, async (req, res) => {
+app.post('/protocolos', authMiddleware, soloAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     const { nombre, tipo_equipo, descripcion, items } = req.body;
@@ -291,7 +300,7 @@ app.post('/protocolos', authMiddleware, soloSuperAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally { client.release(); }
 });
-app.put('/protocolos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
+app.put('/protocolos/:id', authMiddleware, soloAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
@@ -316,7 +325,7 @@ app.put('/protocolos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally { client.release(); }
 });
-app.delete('/protocolos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
+app.delete('/protocolos/:id', authMiddleware, soloAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM protocolos WHERE id=$1',[req.params.id]);
     res.json({ ok: true });
@@ -1260,7 +1269,7 @@ app.get('/indicadores/consolidado', authMiddleware, async (req, res) => {
 //////////////////////////////////////////////////
 
 // Listar proveedores con filtros y stats
-app.get('/proveedores', authMiddleware, async (req, res) => {
+app.get('/proveedores', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const q = instId
@@ -1281,7 +1290,7 @@ app.get('/proveedores', authMiddleware, async (req, res) => {
 });
 
 // Detalle de un proveedor
-app.get('/proveedores/:id', authMiddleware, async (req, res) => {
+app.get('/proveedores/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT p.*, u.nombre AS creador_nombre, i.nombre AS institucion_nombre
@@ -1297,9 +1306,8 @@ app.get('/proveedores/:id', authMiddleware, async (req, res) => {
 });
 
 // Crear proveedor
-app.post('/proveedores', authMiddleware, async (req, res) => {
+app.post('/proveedores', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
-    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
     const d = req.body;
     const instId = req.user.institucion_id || null;
     const result = await pool.query(
@@ -1317,9 +1325,8 @@ app.post('/proveedores', authMiddleware, async (req, res) => {
 });
 
 // Actualizar proveedor
-app.put('/proveedores/:id', authMiddleware, async (req, res) => {
+app.put('/proveedores/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
-    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
     const { id } = req.params;
     const d = req.body;
     await pool.query(
@@ -1339,7 +1346,7 @@ app.put('/proveedores/:id', authMiddleware, async (req, res) => {
 });
 
 // Eliminar proveedor
-app.delete('/proveedores/:id', authMiddleware, soloAdmin, async (req, res) => {
+app.delete('/proveedores/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     // Verificar que no tenga contratos ni OTs asociadas
@@ -1355,7 +1362,7 @@ app.delete('/proveedores/:id', authMiddleware, soloAdmin, async (req, res) => {
 });
 
 // KPIs proveedores
-app.get('/proveedores/kpis/general', authMiddleware, async (req, res) => {
+app.get('/proveedores/kpis/general', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const w = instId ? 'WHERE institucion_id=$1' : '';
@@ -1378,7 +1385,7 @@ app.get('/proveedores/kpis/general', authMiddleware, async (req, res) => {
 //////////////////////////////////////////////////
 
 // Listar contratos
-app.get('/contratos', authMiddleware, async (req, res) => {
+app.get('/contratos', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const q = instId
@@ -1411,7 +1418,7 @@ app.get('/contratos', authMiddleware, async (req, res) => {
 });
 
 // Detalle de un contrato
-app.get('/contratos/:id', authMiddleware, async (req, res) => {
+app.get('/contratos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT c.*, p.razon_social AS proveedor_nombre, p.nit AS proveedor_nit, p.email AS proveedor_email
@@ -1426,9 +1433,8 @@ app.get('/contratos/:id', authMiddleware, async (req, res) => {
 });
 
 // Crear contrato
-app.post('/contratos', authMiddleware, async (req, res) => {
+app.post('/contratos', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
-    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
     const d = req.body;
     if (!d.numero_contrato || !d.proveedor_id) return res.status(400).json({ error: 'Número y proveedor obligatorios' });
     const instId = req.user.institucion_id || null;
@@ -1450,9 +1456,8 @@ app.post('/contratos', authMiddleware, async (req, res) => {
 });
 
 // Actualizar contrato
-app.put('/contratos/:id', authMiddleware, async (req, res) => {
+app.put('/contratos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
-    if (req.user.rol === 'Auditor') return res.status(403).json({ error: 'Sin permisos' });
     const { id } = req.params;
     const d = req.body;
     await pool.query(
@@ -1472,7 +1477,7 @@ app.put('/contratos/:id', authMiddleware, async (req, res) => {
 });
 
 // Eliminar contrato
-app.delete('/contratos/:id', authMiddleware, soloAdmin, async (req, res) => {
+app.delete('/contratos/:id', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const ots = await pool.query('SELECT COUNT(*) FROM mantenimientos WHERE contrato_id=$1',[id]);
@@ -1486,7 +1491,7 @@ app.delete('/contratos/:id', authMiddleware, soloAdmin, async (req, res) => {
 });
 
 // KPIs contratos
-app.get('/contratos/kpis/general', authMiddleware, async (req, res) => {
+app.get('/contratos/kpis/general', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const w = instId ? 'WHERE institucion_id=$1' : '';
@@ -1520,7 +1525,7 @@ app.get('/contratos/kpis/general', authMiddleware, async (req, res) => {
 });
 
 // Alertas: contratos por vencer (próximos 60 días)
-app.get('/contratos/alertas/vencimiento', authMiddleware, async (req, res) => {
+app.get('/contratos/alertas/vencimiento', authMiddleware, soloSuperAdmin, async (req, res) => {
   try {
     const instId = filtroInstitucion(req);
     const r = await pool.query(
