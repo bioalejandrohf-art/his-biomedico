@@ -1152,26 +1152,30 @@ export default function App() {
         { id:'mantenimiento', icon:'⚙', label:'Mantenimiento' },
         { id:'tecnovigilancia', icon:'⚠', label:'Tecnovigilancia' },
         { id:'repuestos', icon:'📦', label:'Repuestos' },
-        ...(esSuperAdmin ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
+        // Protocolos: SuperAdmin, Admin y Auditor
+        ...(['SuperAdmin','Admin','Auditor'].includes(rol) ? [{ id:'protocolos', icon:'📋', label:'Protocolos' }] : []),
       ]
     },
-    {
-      id:'proveedores',
+    // Proveedores y Contratos: SOLO SuperAdmin
+    ...(esSuperAdmin ? [{
+      id:'proveedores_grp',
       label:'Proveedores',
       icon:'🏢',
       items:[
         { id:'proveedores', icon:'🏢', label:'Proveedores' },
         { id:'contratos', icon:'📄', label:'Contratos' },
       ]
-    },
+    }] : []),
     {
       id:'admin',
       label:'Administración',
       icon:'⚙',
       items:[
-        ...(['Admin','SuperAdmin'].includes(rol) ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
-        ...(esSuperAdmin ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
-      ].filter(Boolean)
+        // Usuarios: SOLO SuperAdmin
+        ...(esSuperAdmin ? [{ id:'usuarios', icon:'◉', label:'Usuarios' }] : []),
+        // Instituciones: SuperAdmin (editar) + Admin/Auditor (solo ver)
+        ...(['SuperAdmin','Admin','Auditor'].includes(rol) ? [{ id:'instituciones', icon:'🏥', label:'Instituciones' }] : []),
+      ]
     },
   ].filter(g => g.items.length > 0);
   const titulos = {
@@ -1333,9 +1337,9 @@ export default function App() {
               {rol!=='Auditor'&&seccion==='inventario'&&<button className="btn btn-primary" onClick={()=>{setEditando(null);setForm(formVacio);}}>+ Nuevo equipo</button>}
               {rol!=='Auditor'&&seccion==='tecnovigilancia'&&<button className="btn btn-primary" onClick={()=>setModalTecno(true)}>+ Nuevo reporte</button>}
               {rol!=='Auditor'&&seccion==='repuestos'&&<button className="btn btn-primary" onClick={()=>setModalRep(false)}>+ Nuevo repuesto</button>}
-              {['Admin','SuperAdmin'].includes(rol)&&seccion==='usuarios'&&<button className="btn btn-primary" onClick={()=>setModalUsuario(false)}>+ Nuevo usuario</button>}
+              {esSuperAdmin&&seccion==='usuarios'&&<button className="btn btn-primary" onClick={()=>setModalUsuario(false)}>+ Nuevo usuario</button>}
               {esSuperAdmin&&seccion==='instituciones'&&<button className="btn btn-primary" onClick={()=>setModalInst(false)}>+ Nueva institución</button>}
-              {esSuperAdmin&&seccion==='protocolos'&&<button className="btn btn-primary" onClick={()=>setModalProtocolo(false)}>+ Nuevo protocolo</button>}
+              {['SuperAdmin','Admin'].includes(rol)&&seccion==='protocolos'&&<button className="btn btn-primary" onClick={()=>setModalProtocolo(false)}>+ Nuevo protocolo</button>}
             </div>
           </div>
 
@@ -1535,7 +1539,7 @@ export default function App() {
               <div className="panel"><div className="panel-header"><div className="panel-title">{equipoSel?`Trazabilidad — ${equipoSel.nombre}`:'Selecciona un equipo'}</div></div><div className="panel-body">{!equipoSel?<div className="empty-state">Ve a Inventario y presiona ◷</div>:historial.length===0?<div className="empty-state">Sin eventos</div>:<div className="timeline">{historial.map(h=>(<div className="tl-item" key={h.id}><div className="tl-dot" /><div className="tl-content"><div className="tl-action">{h.accion}</div><div className="tl-desc">{h.descripcion}</div><div className="tl-date">{formatFecha(h.fecha)}</div></div></div>))}</div>}</div></div>
             )}
 
-            {seccion==='usuarios'&&['Admin','SuperAdmin'].includes(rol)&&(<>
+            {seccion==='usuarios'&&esSuperAdmin&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>{[{label:'Total',valor:usuarios.length,cls:'blue'},{label:'Admins',valor:usuarios.filter(u=>u.rol==='Admin'||u.rol==='SuperAdmin').length,cls:'purple'},{label:'Biomédicos',valor:usuarios.filter(u=>u.rol==='Biomedico').length,cls:'green'},{label:'Auditores',valor:usuarios.filter(u=>u.rol==='Auditor').length,cls:'gray'}].map(k=><div key={k.label} className={`kpi-card ${k.cls||'blue'}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
               <div className="panel"><div className="panel-header"><div className="panel-title">Usuarios</div><span className="badge badge-gray">{usuarios.length}</span></div>{usuarios.length===0?<div className="empty-state">Sin usuarios</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Creado</th>{esSuperAdmin&&<th>Institución</th>}<th></th></tr></thead><tbody>{usuarios.map(u=>(<tr key={u.id}><td style={{fontWeight:500}}>{u.nombre}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{u.email}</td><td><span className={`badge ${u.rol==='Admin'||u.rol==='SuperAdmin'?'badge-purple':u.rol==='Auditor'?'badge-gray':'badge-green'}`}>{u.rol}</span></td><td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{formatFecha(u.creado_en)}</td>{esSuperAdmin&&<td style={{fontSize:11,color:G.textMuted}}>{u.institucion_nombre||'Global'}</td>}<td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalUsuario(u)}>✎</button>{u.id!==user?.id&&<button className="btn btn-danger btn-icon" onClick={()=>eliminarUsuario(u.id)}>✕</button>}</div></td></tr>))}</tbody></table>}</div>
             </>)}
@@ -1565,7 +1569,7 @@ export default function App() {
               />
             )}
 
-            {seccion==='protocolos'&&esSuperAdmin&&(<>
+            {seccion==='protocolos'&&['SuperAdmin','Admin','Auditor'].includes(rol)&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
                 {[
                   {label:'Total Protocolos',valor:protocolos.length,cls:'blue'},
@@ -1606,8 +1610,12 @@ export default function App() {
                           <td><span className={`badge ${p.activo?'badge-green':'badge-gray'}`}>{p.activo?'ACTIVO':'INACTIVO'}</span></td>
                           <td style={{fontFamily:'IBM Plex Mono',fontSize:11,color:G.textMuted}}>{formatFecha(p.created_at)}</td>
                           <td><div style={{display:'flex',gap:4}}>
-                            <button className="btn btn-ghost btn-icon" onClick={()=>setModalProtocolo(p)} title="Editar">✎</button>
-                            <button className="btn btn-danger btn-icon" onClick={()=>eliminarProtocolo(p.id)} title="Eliminar">✕</button>
+                            {['SuperAdmin','Admin'].includes(rol) ? (<>
+                              <button className="btn btn-ghost btn-icon" onClick={()=>setModalProtocolo(p)} title="Editar">✎</button>
+                              <button className="btn btn-danger btn-icon" onClick={()=>eliminarProtocolo(p.id)} title="Eliminar">✕</button>
+                            </>) : (
+                              <button className="btn btn-ghost btn-icon" onClick={()=>setModalProtocolo(p)} title="Ver detalle">◷</button>
+                            )}
                           </div></td>
                         </tr>
                       ))}
@@ -1617,7 +1625,7 @@ export default function App() {
               </div>
             </>)}
 
-            {seccion==='instituciones'&&esSuperAdmin&&(<>
+            {seccion==='instituciones'&&['SuperAdmin','Admin','Auditor'].includes(rol)&&(<>
               <div className="kpi-grid" style={{gridTemplateColumns:'repeat(3,1fr)'}}>{[{label:'Total',valor:instituciones.length,cls:'blue'},{label:'Activas',valor:instituciones.filter(i=>i.activa).length,cls:'green'},{label:'Inactivas',valor:instituciones.filter(i=>!i.activa).length,cls:'red'}].map(k=><div key={k.label} className={`kpi-card ${k.cls}`}><div className="kpi-label">{k.label}</div><div className="kpi-value">{k.valor}</div></div>)}</div>
               <div className="panel"><div className="panel-header"><div className="panel-title">Instituciones</div><span className="badge badge-gray">{instituciones.length}</span></div>{instituciones.length===0?<div className="empty-state">Sin instituciones</div>:<table className="data-table"><thead><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Tel</th><th>Email</th><th>REPS</th><th>Estado</th><th></th></tr></thead><tbody>{instituciones.map(inst=>(<tr key={inst.id}>
                 <td style={{fontWeight:500}}>
@@ -1626,7 +1634,7 @@ export default function App() {
                     {inst.nombre}
                   </div>
                 </td>
-                <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}><button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button><button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button></div></td></tr>))}</tbody></table>}</div>
+                <td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.nit||'—'}</td><td style={{color:G.textMuted}}>{inst.ciudad||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.telefono||'—'}</td><td style={{color:G.textMuted,fontSize:11}}>{inst.email||'—'}</td><td style={{fontFamily:'IBM Plex Mono',fontSize:11}}>{inst.codigo_reps||'—'}</td><td><span className={`badge ${inst.activa?'badge-green':'badge-red'}`}>{inst.activa?'ACTIVA':'INACTIVA'}</span></td><td><div style={{display:'flex',gap:4}}>{esSuperAdmin && <button className="btn btn-ghost btn-icon" onClick={()=>setModalInst(inst)}>✎</button>}{esSuperAdmin && <button className="btn btn-purple btn-icon" style={{fontSize:10}} onClick={()=>{fetch(`${API}/instituciones/seleccionar/${inst.id}`,{method:'POST',headers}).then(r=>r.json()).then(d=>{if(d.token){setToken(d.token);setInstSeleccionada(true);setSeccion('dashboard');}});}}>→ Ver</button>}{!esSuperAdmin && <span className="badge badge-gray" style={{fontSize:9}}>Solo lectura</span>}</div></td></tr>))}</tbody></table>}</div>
             </>)}
 
           </div>
